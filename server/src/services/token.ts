@@ -36,7 +36,7 @@ export async function createTokenPair(userId: string): Promise<{ user: Authentic
 
   return {
     user,
-    accessToken: signAccessToken(user),
+    accessToken: signAccessToken({ sub: user.id, email: user.email, role: user.role }),
     refreshToken: signRefreshToken(userId, jti),
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS
   };

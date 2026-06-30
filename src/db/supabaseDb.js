@@ -92,11 +92,19 @@ function mapPayment(row) {
   return {
     id:             row.id,
     bookingId:      row.booking_id,
+    userId:         row.user_id,
+    transactionId:  row.transaction_id || row.transaction_ref,
+    paymentMethod:  row.payment_method || row.method,
     amount:         Number(row.amount),
-    method:         row.method,
-    status:         row.status,
-    transactionRef: row.transaction_ref,
+    currency:       row.currency || 'PHP',
+    paymentStatus:  row.payment_status || row.status,
+    paidAt:         row.paid_at,
     createdAt:      row.created_at,
+    bookingNumber:  row.booking_number,
+    propertyTitle:  row.property_title,
+    unitName:       row.unit_name,
+    checkIn:        row.check_in,
+    checkOut:       row.check_out,
   };
 }
 
@@ -573,18 +581,25 @@ export async function updateBookingStatusDb(bookingId, status) {
 export async function insertPaymentDb(paymentData) {
   if (!SUPABASE_ENABLED) {
     return localDb.insertRecord('payments', {
-      bookingId: paymentData.bookingId, amount: paymentData.amount,
-      method: paymentData.method, status: 'pending',
-      transactionRef: 'TXN-' + Math.floor(1000000 + Math.random() * 9000000)
+      bookingId: paymentData.bookingId,
+      userId: paymentData.userId,
+      amount: paymentData.amount,
+      paymentMethod: paymentData.paymentMethod || paymentData.method,
+      paymentStatus: 'pending',
+      transactionId: 'TXN-' + Math.floor(1000000 + Math.random() * 9000000),
+      currency: 'PHP'
     });
   }
   const row = {
     id:              generateUuid(),
     booking_id:      paymentData.bookingId,
+    user_id:         paymentData.userId,
     amount:          paymentData.amount,
-    method:          paymentData.method,
-    status:          'pending',
-    transaction_ref: 'TXN-' + Math.floor(1000000 + Math.random() * 9000000),
+    payment_method:  paymentData.paymentMethod || paymentData.method || 'gcash',
+    payment_status:  'pending',
+    transaction_id:  'TXN-' + Math.floor(1000000 + Math.random() * 9000000),
+    currency:        'PHP',
+    gateway_response: {},
   };
   const { data, error } = await supabase.from('payments').insert(row).select().single();
   if (error) throw new Error(error.message);
@@ -593,10 +608,13 @@ export async function insertPaymentDb(paymentData) {
 
 export async function updatePaymentStatusDb(paymentId, status) {
   if (!SUPABASE_ENABLED) {
-    localDb.updateRecord('payments', paymentId, { status });
+    localDb.updateRecord('payments', paymentId, { paymentStatus: status, payment_status: status });
     return;
   }
-  const { error } = await supabase.from('payments').update({ status }).eq('id', paymentId);
+  const { error } = await supabase.from('payments').update({ 
+    payment_status: status,
+    paid_at: status === 'paid' ? nowISO() : undefined
+  }).eq('id', paymentId);
   if (error) throw new Error(error.message);
 }
 

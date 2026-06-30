@@ -38,6 +38,8 @@ function AppContent() {
     updateBookingStatus,
     verifyPayment,
     refundPayment,
+    getPaymentDashboard,
+    getReceiptPdf,
     addReview,
     replyToReview,
     updateSettings
@@ -60,10 +62,13 @@ function AppContent() {
     );
   }
 
-  // Navigation: 'home' | 'property_detail' | 'guest_dashboard' | 'admin_dashboard' | 'admin_properties' | 'admin_units' | 'admin_bookings' | 'admin_settings' | 'admin_logs'
+  // Navigation: 'home' | 'property_detail' | 'guest_dashboard' | 'admin_dashboard' | 'admin_properties' | 'admin_units' | 'admin_bookings' | 'admin_payments' | 'admin_settings' | 'admin_logs' | 'payment_success' | 'payment_cancelled'
   const [currentTab, setCurrentTab] = useState('home');
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [selectedUnitId, setSelectedUnitId] = useState(null);
+
+  // Payment callback state
+  const [paymentSuccessBookingId, setPaymentSuccessBookingId] = useState(null);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -278,10 +283,21 @@ function AppContent() {
     }
   };
 
+  const paymentMethods = [
+    { value: 'gcash', label: 'GCash', icon: 'Smartphone' },
+    { value: 'maya', label: 'Maya', icon: 'Wallet' },
+    { value: 'credit_card', label: 'Credit Card', icon: 'CreditCard' },
+    { value: 'debit_card', label: 'Debit Card', icon: 'CreditCard' },
+    { value: 'paypal', label: 'PayPal', icon: 'Wallet' },
+    { value: 'bank_transfer', label: 'Bank Transfer', icon: 'Banknote' },
+    { value: 'apple_pay', label: 'Apple Pay' },
+    { value: 'google_pay', label: 'Google Pay' }
+  ];
+
   const handleConfirmPayment = async () => {
     setCheckoutLoading(true);
     try {
-      const { booking } = await createBooking(
+      const result = await createBooking(
         selectedPropertyId,
         selectedUnitId,
         bookingDates.checkIn,
@@ -290,19 +306,22 @@ function AppContent() {
         checkoutMethod
       );
       setShowCheckoutModal(false);
-      setBookingConfirmedRef(booking);
+      setBookingConfirmedRef(result.booking);
       setBookingDates({ checkIn: '', checkOut: '', guests: 1 });
 
-      // Automatically show simulated email notification
-      setEmailSentModalInfo({
-        bookingId: booking.id,
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut,
-        price: booking.totalPrice,
-        propertyTitle: properties.find(pr => pr.id === selectedPropertyId)?.title || 'Stay',
-        unitName: propertyUnits.find(u => u.id === selectedUnitId)?.unitName || 'Unit',
-        userEmail: currentUser?.email || 'guest@example.com'
-      });
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      } else {
+        setEmailSentModalInfo({
+          bookingId: result.booking.id,
+          checkIn: result.booking.checkIn,
+          checkOut: result.booking.checkOut,
+          price: result.booking.totalPrice,
+          propertyTitle: properties.find(pr => pr.id === selectedPropertyId)?.title || 'Stay',
+          unitName: propertyUnits.find(u => u.id === selectedUnitId)?.unitName || 'Unit',
+          userEmail: currentUser?.email || 'guest@example.com'
+        });
+      }
     } catch (err) {
       alert(err.message);
     } finally {
@@ -571,6 +590,7 @@ function AppContent() {
       { id: 'admin_properties', label: 'Properties Manager', icon: 'Home' },
       { id: 'admin_units', label: 'Unit Management', icon: 'Box' },
       { id: 'admin_bookings', label: 'Reservations Timeline', icon: 'Calendar' },
+      { id: 'admin_payments', label: 'Payment Management', icon: 'CreditCard' },
       { id: 'admin_settings', label: 'Website Customizer', icon: 'Settings' },
       { id: 'admin_logs', label: 'Security & Logs', icon: 'Lock' }
     ];
@@ -1246,18 +1266,24 @@ function AppContent() {
                               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                                 Dates: <strong>{b.checkIn}</strong> to <strong>{b.checkOut}</strong> • {b.guestsCount} guests
                               </p>
-                              <div className="flex gap-2 align-center" style={{ marginTop: '8px' }}>
-                                <span className={`badge badge-success`}>
-                                  Booking: Confirmed
-                                </span>
-                                {pay && (
-                                  <span className={`badge ${
-                                    pay.status === 'verified' ? 'badge-success' : 'badge-warning'
-                                  }`}>
-                                    Payment: {pay.status}
-                                  </span>
-                                )}
-                              </div>
+<div className="flex gap-2 align-center" style={{ marginTop: '8px' }}>
+                                 <span className={`badge ${
+                                   b.paymentStatus === 'paid' || b.status === 'confirmed' ? 'badge-success' : 
+                                   b.paymentStatus === 'pending' || b.status === 'pending_payment' ? 'badge-warning' :
+                                   'badge-secondary'
+                                 }`}>
+                                   Booking: {b.bookingStatus === 'confirmed' ? 'Confirmed' : b.bookingStatus || 'Pending'}
+                                 </span>
+                                 {pay && (
+                                   <span className={`badge ${
+                                     (pay.paymentStatus || pay.status) === 'paid' ? 'badge-success' : 
+                                     (pay.paymentStatus || pay.status) === 'pending' ? 'badge-warning' :
+                                     'badge-secondary'
+                                   }`}>
+                                     Payment: {(pay.paymentStatus || pay.status) || 'pending'}
+                                   </span>
+                                 )}
+                               </div>
                             </div>
 
                             <div className="flex gap-2">
@@ -1265,11 +1291,11 @@ function AppContent() {
                                 <Icons.FileText size={16} /> Receipt
                               </button>
                               
-                              {b.status === 'pending' && (
-                                <button className="btn btn-danger" onClick={() => cancelBooking(b.id, 'user')}>
-                                  Cancel Stay
-                                </button>
-                              )}
+{b.bookingStatus === 'pending_payment' || b.status === 'pending_payment' ? (
+                                 <button className="btn btn-danger" onClick={() => cancelBooking(b.id, 'user')}>
+                                   Cancel Stay
+                                 </button>
+                               ) : null}
                             </div>
                           </div>
                         );
@@ -1767,6 +1793,138 @@ function AppContent() {
                   </div>
                 )}
 
+                {/* ADMIN PAYMENT MANAGEMENT */}
+                {currentTab === 'admin_payments' && (
+                  <div className="flex flex-col gap-4">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Payment Management Dashboard</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>View revenue, manage transactions, process refunds, and export payment reports.</p>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>TOTAL REVENUE</span>
+                          <Icons.DollarSign size={20} style={{ color: 'var(--color-success)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>
+                          ₱{payments.filter(p => p.paymentStatus === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                        </h2>
+                      </div>
+
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>DAILY REVENUE</span>
+                          <Icons.Calendar size={20} style={{ color: 'var(--color-info)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>
+                          ₱{payments.filter(p => p.paymentStatus === 'paid' && new Date(p.createdAt).toDateString() === new Date().toDateString()).reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                        </h2>
+                      </div>
+
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>MONTHLY REVENUE</span>
+                          <Icons.BarChart3 size={20} style={{ color: 'var(--color-warning)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>
+                          ₱{payments.filter(p => p.paymentStatus === 'paid' && new Date(p.createdAt).getMonth() === new Date().getMonth()).reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                        </h2>
+                      </div>
+
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PENDING</span>
+                          <Icons.Clock size={20} style={{ color: 'var(--color-danger)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>
+                          {payments.filter(p => p.paymentStatus === 'pending').length}
+                        </h2>
+                      </div>
+                    </div>
+
+                    <div className="glass" style={{ padding: '24px', borderRadius: 'var(--radius-md)' }}>
+                      <div className="flex justify-between align-center" style={{ marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0 }}>Payment Transactions</h4>
+                        <div className="flex gap-2">
+                          <div className="input-search-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: 'var(--radius-pill)', width: '240px', gap: '8px' }}>
+                            <Icons.Search size={14} />
+                            <input type="text" placeholder="Search transactions..." value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.85rem' }} />
+                          </div>
+                          <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={() => handleExportCSV('revenue')}>
+                            <Icons.Download size={14} /> Export CSV
+                          </button>
+                        </div>
+                      </div>
+
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                            <th style={{ padding: '10px 8px' }}>Booking ID</th>
+                            <th style={{ padding: '10px 8px' }}>Property</th>
+                            <th style={{ padding: '10px 8px' }}>Amount</th>
+                            <th style={{ padding: '10px 8px' }}>Method</th>
+                            <th style={{ padding: '10px 8px' }}>Status</th>
+                            <th style={{ padding: '10px 8px' }}>Date</th>
+                            <th style={{ padding: '10px 8px', textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payments
+                            .filter(p => logSearchQuery === '' || 
+                              (p.bookingId && p.bookingId.includes(logSearchQuery)) || 
+                              (p.transactionId && p.transactionId.includes(logSearchQuery)) ||
+                              (p.transactionRef && p.transactionRef.includes(logSearchQuery)))
+                            .map(p => {
+                              const booking = bookings.find(b => b.id === p.bookingId);
+                              const prop = properties.find(x => x.id === booking?.propertyId);
+                              const canRefund = p.paymentStatus === 'paid';
+                              
+                              return (
+                                <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                  <td style={{ padding: '10px 8px', fontFamily: 'monospace' }}>{p.bookingId?.slice(0, 8)}...</td>
+                                  <td style={{ padding: '10px 8px' }}>{prop?.title || 'Unknown'}</td>
+                                  <td style={{ padding: '10px 8px', fontWeight: 700, color: 'var(--color-primary)' }}>₱{Number(p.amount).toLocaleString()}</td>
+                                  <td style={{ padding: '10px 8px' }}><span className="badge badge-info">{p.paymentMethod || p.method || 'N/A'}</span></td>
+                                  <td style={{ padding: '10px 8px' }}>
+                                    <span className={`badge ${
+                                      p.paymentStatus === 'paid' ? 'badge-success' : 
+                                      p.paymentStatus === 'failed' ? 'badge-danger' : 
+                                      p.paymentStatus === 'refunded' || p.paymentStatus === 'partially_refunded' ? 'badge-warning' :
+                                      'badge-secondary'
+                                    }`}>
+                                      {p.paymentStatus || 'pending'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{new Date(p.createdAt).toLocaleString()}</td>
+                                  <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                                    <div className="flex gap-1 justify-end">
+                                      <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => setSelectedReceiptBooking(booking)}>
+                                        View Receipt
+                                      </button>
+                                      {canRefund && (
+                                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => refundPayment(p.id, null)}>
+                                          Process Refund
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {payments.length === 0 && (
+                            <tr>
+                              <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>
+                                No payment transactions recorded yet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* ADMIN SECURITY LOGS */}
                 {currentTab === 'admin_logs' && (
                   <div className="flex flex-col gap-3">
@@ -1806,46 +1964,35 @@ function AppContent() {
       {/* CHECKOUT MODAL FLOW */}
       {showCheckoutModal && (
         <div className="modal-overlay" onClick={() => setShowCheckoutModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <button className="btn-icon" onClick={() => setShowCheckoutModal(false)} style={{ position: 'absolute', top: '16px', right: '16px' }}>
               <Icons.X size={20} />
             </button>
 
-            <h3 style={{ marginBottom: '16px' }}>Secure Checkout & instant Payment</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>Secure escrow payment simulation. Select parameters:</p>
+            <h3 style={{ marginBottom: '16px' }}>Secure Checkout & Payment</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>Choose your preferred payment method to complete booking.</p>
 
-            <div className="input-group">
-              <label>Payment Method</label>
-              <select className="input-field" value={checkoutMethod} onChange={e => setCheckoutMethod(e.target.value)}>
-                <option value="Credit Card">Credit Card / Debit Card</option>
-                <option value="PayPal">PayPal Account</option>
-                <option value="Bank Transfer">Direct Bank Transfer</option>
-              </select>
+            <div className="flex flex-col gap-3">
+              {paymentMethods.map(method => (
+                <label key={method.value} className="flex align-center gap-3" style={{ cursor: 'pointer', padding: '12px 16px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={method.value}
+                    checked={checkoutMethod === method.value}
+                    onChange={e => setCheckoutMethod(e.target.value)}
+                    style={{ accentColor: 'var(--color-primary)' }}
+                  />
+                  <div className="flex align-center gap-2" style={{ flexGrow: 1 }}>
+                    {renderIcon(method.icon, 18)}
+                    <span style={{ fontWeight: 500 }}>{method.label}</span>
+                  </div>
+                </label>
+              ))}
             </div>
 
-            {checkoutMethod === 'Credit Card' && (
-              <div className="flex flex-col gap-2">
-                <div className="input-group">
-                  <label>Card Number</label>
-                  <input type="text" className="input-field" placeholder="4111 2222 3333 4444" required />
-                </div>
-                <div className="grid grid-cols-2 gap-2" style={{ gap: '8px' }}>
-                  <div className="input-group"><label>Expiry Date</label><input type="text" className="input-field" placeholder="MM/YY" required /></div>
-                  <div className="input-group"><label>CVV</label><input type="password" className="input-field" placeholder="123" required /></div>
-                </div>
-              </div>
-            )}
-
-            {checkoutMethod === 'Bank Transfer' && (
-              <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '16px', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                <p>Transfer funds to the following escrow account:</p>
-                <p style={{ fontFamily: 'monospace', fontWeight: 700, margin: '8px 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>US84 HAVENS 9837 4625 1029 38</p>
-                <p>State your Reservation Reference in payment descriptions.</p>
-              </div>
-            )}
-
-            <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} onClick={handleConfirmPayment} disabled={checkoutLoading}>
-              {checkoutLoading ? 'Processing Escrow Payment...' : 'Pay & Confirm Booking'}
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }} onClick={handleConfirmPayment} disabled={checkoutLoading}>
+              {checkoutLoading ? 'Redirecting to Payment Gateway...' : 'Proceed to Payment'}
             </button>
           </div>
         </div>

@@ -36,7 +36,7 @@ bookingRouter.get(
   '/:id',
   requireAuth,
   asyncHandler(async (req, res) => {
-    const data = await bookingService.getBookingById(req.params.id);
+    const data = await bookingService.getBookingById(String(req.params.id));
     res.json({ data });
   })
 );
@@ -46,7 +46,7 @@ bookingRouter.patch(
   requireAuth,
   validate(bookingService.updateBookingStatusSchema),
   asyncHandler(async (req, res) => {
-    const data = await bookingService.updateBookingStatus(req.params.id, req.body.status, req.user!);
+    const data = await bookingService.updateBookingStatus(String(req.params.id), req.body.status, req.user!);
     res.json({ data });
   })
 );

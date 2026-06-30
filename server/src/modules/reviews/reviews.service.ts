@@ -104,7 +104,11 @@ export async function createReview(userId: string, input: CreateReviewInput) {
     [input.propertyId, userId, input.bookingId, input.rating, input.comment]
   );
 
-  return mapReview(rows[0]);
+  const review = rows[0];
+  if (!review) {
+    throw createHttpError(500, 'internal_error', 'Review could not be created.');
+  }
+  return mapReview(review);
 }
 
 export async function updateReviewResponse(id: string, response: string, actorId: string) {

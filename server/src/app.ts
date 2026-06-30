@@ -8,6 +8,7 @@ import { env } from './config/env';
 import { analyticsRouter } from './modules/analytics/analytics.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { bookingRouter } from './modules/bookings/bookings.routes';
+import { paymentRouter, paymongoWebhookRouter, xenditWebhookRouter } from './modules/payments/payments.routes';
 import { propertyRouter } from './modules/properties/properties.routes';
 import { reviewRouter } from './modules/reviews/reviews.routes';
 import { apiLimiter } from './middleware/rate-limit';
@@ -19,10 +20,12 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '1mb' }));
 app.use(requestId);
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(apiLimiter);
+app.use('/api/payments/webhooks/paymongo', express.raw({ type: 'application/json', limit: '1mb' }), paymongoWebhookRouter);
+app.use('/api/payments/webhooks/xendit', express.raw({ type: 'application/json', limit: '1mb' }), xenditWebhookRouter);
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', async (_req, res, next) => {
   try {
@@ -40,6 +43,7 @@ app.get('/health', async (_req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/api/properties', propertyRouter);
 app.use('/api/bookings', bookingRouter);
+app.use('/api/payments', paymentRouter);
 app.use('/api/reviews', reviewRouter);
 app.use('/api/analytics', analyticsRouter);
 

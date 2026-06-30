@@ -284,7 +284,6 @@ export function DbProvider({ children }) {
     const details = calculateBookingDetails(propertyId, unitId, checkIn, checkOut, guestsCount);
     if (!details) throw new Error('Failed to compute pricing.');
 
-    // Automatically confirmed workflow: status is approved, payment status is verified instantly
     const booking = await sdb.insertBookingDb({
       propertyId,
       unitId,
@@ -294,35 +293,29 @@ export function DbProvider({ children }) {
       totalPrice: details.totalPrice,
       totalAmount: details.totalPrice,
       guestsCount: Number(guestsCount),
-      status: 'approved',
-      paymentStatus: 'verified'
+      status: 'pending_payment',
+      paymentStatus: 'pending',
+      bookingStatus: 'pending_payment'
     });
 
     const payment = await sdb.insertPaymentDb({
       bookingId: booking.id,
+      userId: currentUser.id,
       amount: details.totalPrice,
-      method: paymentMethod,
-      status: 'verified'
+      paymentMethod
     });
-    // Ensure payment status is updated to verified
-    await sdb.updatePaymentStatusDb(payment.id, 'verified');
 
     const propTitle = properties.find(p => p.id === propertyId)?.title || 'Property';
     const unitName = propertyUnits.find(u => u.id === unitId)?.unitName || 'Unit';
     
     await sdb.insertNotificationDb({
       userId: 'a1',
-      message: `Instant booking confirmed from ${currentUser.name} for "${propTitle} - ${unitName}". Amount: ₱${details.totalPrice}`,
-      type: 'success'
-    });
-    await sdb.insertNotificationDb({
-      userId: currentUser.id,
-      message: `Your reservation for "${propTitle} - ${unitName}" is confirmed! A payment confirmation email has been sent. Ref: ${booking.id}`,
-      type: 'success'
+      message: `New booking received from ${currentUser.name} for "${propTitle} - ${unitName}". Amount: ₱${details.totalPrice}`,
+      type: 'info'
     });
 
     await loadAllData();
-    return { booking, payment };
+    return { booking, payment, pricing: details };
   };
 
   const cancelBooking = async (bookingId, roleContext) => {
@@ -374,8 +367,8 @@ export function DbProvider({ children }) {
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) throw new Error('Payment not found.');
 
-    await sdb.updatePaymentStatusDb(paymentId, 'verified');
-    await sdb.updateBookingStatusDb(payment.bookingId, 'approved');
+    await sdb.updatePaymentStatusDb(paymentId, 'paid');
+    await sdb.updateBookingStatusDb(payment.bookingId, 'confirmed');
 
     const booking = bookings.find(b => b.id === payment.bookingId);
     if (booking) {
@@ -386,20 +379,52 @@ export function DbProvider({ children }) {
     await loadAllData();
   };
 
-  const refundPayment = async (paymentId) => {
+  const refundPayment = async (paymentId, amount) => {
     if (!currentAdmin) throw new Error('Unauthorized.');
     const payment = payments.find(p => p.id === paymentId);
     if (!payment) throw new Error('Payment not found.');
 
-    await sdb.updatePaymentStatusDb(paymentId, 'refunded');
-    await sdb.updateBookingStatusDb(payment.bookingId, 'cancelled');
+    const status = amount && amount < payment.amount ? 'partially_refunded' : 'refunded';
+    await sdb.updatePaymentStatusDb(paymentId, status);
+    await sdb.updateBookingStatusDb(payment.bookingId, status === 'refunded' ? 'cancelled' : 'confirmed');
 
     const booking = bookings.find(b => b.id === payment.bookingId);
     if (booking) {
-      await sdb.insertNotificationDb({ userId: booking.userId, message: `Your payment of ₱${payment.amount} has been refunded.`, type: 'warning' });
+      await sdb.insertNotificationDb({ userId: booking.userId, message: `Your payment of ₱${payment.amount} has been ${status === 'refunded' ? 'refunded' : 'partially refunded'}.`, type: 'warning' });
     }
     await sdb.insertActivityLogDb(currentAdmin.id, 'Refund Payment', `Refunded payment ID: ${paymentId}`);
     await loadAllData();
+  };
+
+  const getPaymentDashboard = async () => {
+    if (!SUPABASE_ENABLED) {
+      const paidPayments = payments.filter(p => p.paymentStatus === 'paid');
+      return {
+        totalRevenue: paidPayments.reduce((sum, p) => sum + p.amount, 0),
+        dailyRevenue: paidPayments.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString()).reduce((sum, p) => sum + p.amount, 0),
+        monthlyRevenue: paidPayments.filter(p => new Date(p.createdAt).getMonth() === new Date().getMonth()).reduce((sum, p) => sum + p.amount, 0),
+        pendingPayments: payments.filter(p => p.paymentStatus === 'pending').length,
+        refundedPayments: payments.filter(p => ['refunded', 'partially_refunded'].includes(p.paymentStatus)).length,
+        refundedAmount: payments.filter(p => ['refunded', 'partially_refunded'].includes(p.paymentStatus)).reduce((sum, p) => sum + p.amount, 0)
+      };
+    }
+    const { data, error } = await supabase.rpc('get_payment_dashboard');
+    if (error) throw error;
+    return data;
+  };
+
+  const getReceiptPdf = async (paymentId) => {
+    if (!SUPABASE_ENABLED) {
+      const payment = payments.find(p => p.id === paymentId);
+      if (!payment) throw new Error('Payment not found.');
+      return {
+        filename: `receipt-${paymentId}.pdf`,
+        content: `Receipt for Booking ${payment.bookingId}\nAmount: ₱${payment.amount}\nMethod: ${payment.paymentMethod || payment.method}`
+      };
+    }
+    const { data, error } = await supabase.from('payment_receipts').select('*').eq('payment_id', paymentId).single();
+    if (error) throw error;
+    return data;
   };
 
   // ── Reviews ───────────────────────────────────────────────────────────────
@@ -467,7 +492,7 @@ export function DbProvider({ children }) {
       // Bookings
       calculateBookingDetails, createBooking, cancelBooking, updateBookingStatus,
       // Payments
-      verifyPayment, refundPayment,
+      verifyPayment, refundPayment, getPaymentDashboard, getReceiptPdf,
       // Reviews
       addReview, replyToReview,
       // Settings

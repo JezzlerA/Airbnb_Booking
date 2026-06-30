@@ -5,13 +5,14 @@ import { createHttpError, type UserRole } from '../../utils/http-error';
 
 export const createBookingSchema = z.object({
   propertyId: z.string().uuid(),
+  unitId: z.string().uuid().optional(),
   checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   guestsCount: z.coerce.number().int().positive()
 });
 
 export const updateBookingStatusSchema = z.object({
-  status: z.enum(['pending', 'approved', 'rejected', 'cancelled', 'checked_in', 'checked_out', 'completed'])
+  status: z.enum(['pending_payment', 'confirmed', 'rejected', 'cancelled', 'checked_in', 'checked_out', 'completed'])
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -19,30 +20,42 @@ export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 type BookingRow = {
   id: string;
   property_id: string;
+  unit_id: string | null;
   user_id: string;
   check_in: string;
   check_out: string;
   total_price: string;
+  total_amount: string | null;
   status: string;
+  booking_status: string | null;
+  payment_id: string | null;
+  payment_status: string | null;
   guests_count: number;
   created_at: string;
   updated_at: string;
   property_title: string;
+  unit_name: string | null;
   user_email: string;
 };
 
 export interface Booking {
   id: string;
   propertyId: string;
+  unitId?: string;
   userId: string;
   checkIn: string;
   checkOut: string;
   totalPrice: number;
+  totalAmount: number;
   status: string;
+  bookingStatus: string;
+  paymentId?: string;
+  paymentStatus: string;
   guestsCount: number;
   createdAt: string;
   updatedAt: string;
   propertyTitle?: string;
+  unitName?: string;
   userEmail?: string;
 }
 
@@ -50,15 +63,21 @@ function mapBooking(row: BookingRow): Booking {
   return {
     id: row.id,
     propertyId: row.property_id,
+    unitId: row.unit_id ?? undefined,
     userId: row.user_id,
     checkIn: row.check_in,
     checkOut: row.check_out,
     totalPrice: Number(row.total_price),
+    totalAmount: Number(row.total_amount ?? row.total_price),
     status: row.status,
+    bookingStatus: row.booking_status ?? row.status,
+    paymentId: row.payment_id ?? undefined,
+    paymentStatus: row.payment_status ?? 'pending',
     guestsCount: row.guests_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     propertyTitle: row.property_title,
+    unitName: row.unit_name ?? undefined,
     userEmail: row.user_email
   };
 }
@@ -131,9 +150,10 @@ export async function listBookings(filters: {
   );
 
   const dataResult = await pool.query<BookingRow>(
-    `select b.*, p.title as property_title, u.email as user_email
+    `select b.*, p.title as property_title, pu.unit_name, u.email as user_email
      from bookings b
      join properties p on p.id = b.property_id
+     left join property_units pu on pu.id = b.unit_id
      join users u on u.id = b.user_id
      ${where}
      order by b.created_at desc
@@ -153,9 +173,10 @@ export async function listBookings(filters: {
 
 export async function getBookingById(id: string) {
   const { rows } = await pool.query<BookingRow>(
-    `select b.*, p.title as property_title, u.email as user_email
+    `select b.*, p.title as property_title, pu.unit_name, u.email as user_email
      from bookings b
      join properties p on p.id = b.property_id
+     left join property_units pu on pu.id = b.unit_id
      join users u on u.id = b.user_id
      where b.id = $1`,
     [id]
@@ -196,14 +217,21 @@ export async function createBooking(userId: string, input: CreateBookingInput) {
     }
 
     const { rows } = await client.query<BookingRow>(
-      `insert into bookings (property_id, user_id, check_in, check_out, total_price, guests_count)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into bookings (
+         property_id, unit_id, user_id, check_in, check_out, total_price, total_amount,
+         guests_count, status, booking_status, payment_status
+       )
+       values ($1, $2, $3, $4, $5, $6, $6, $7, 'pending_payment', 'pending_payment', 'pending')
        returning *`,
-      [input.propertyId, userId, input.checkIn, input.checkOut, totalPrice, input.guestsCount]
+      [input.propertyId, input.unitId ?? null, userId, input.checkIn, input.checkOut, totalPrice, input.guestsCount]
     );
 
     await client.query('commit');
-    return mapBooking(rows[0]);
+    const booking = rows[0];
+    if (!booking) {
+      throw createHttpError(500, 'internal_error', 'Booking could not be created.');
+    }
+    return mapBooking(booking);
   } catch (error) {
     await client.query('rollback');
     throw error;
@@ -226,7 +254,12 @@ export async function updateBookingStatus(id: string, status: string, actor: { i
   }
 
   const { rowCount } = await pool.query(
-    `update bookings set status = $1, updated_at = now() where id = $2`,
+    `update bookings
+     set status = $1,
+         booking_status = $1,
+         payment_status = case when $1 = 'confirmed' then 'paid' else payment_status end,
+         updated_at = now()
+     where id = $2`,
     [status, id]
   );
 

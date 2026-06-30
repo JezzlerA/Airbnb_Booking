@@ -12,7 +12,7 @@ reviewRouter.get(
   asyncHandler(async (req, res) => {
     const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
     const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
-    const data = await reviewService.listReviews(req.params.propertyId, page, limit);
+    const data = await reviewService.listReviews(req.params.propertyId!, page, limit);
     res.json({ data: data.data, pagination: data.pagination });
   })
 );
@@ -40,7 +40,7 @@ reviewRouter.patch(
       return;
     }
 
-    await reviewService.updateReviewResponse(req.params.id, result.data.response, req.user!.id);
+    await reviewService.updateReviewResponse(req.params.id!, result.data.response, req.user!.id);
     res.json({ data: { success: true } });
   })
 );

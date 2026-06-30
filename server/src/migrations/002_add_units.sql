@@ -19,3 +19,7 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS booking_status TEXT DEFAULT 'pendi
 
 -- Drop the old per-property bookings overlapping constraint because it prevents booking individual rooms on the same property
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_no_overlap;
+
+-- Enable RLS and add policy for property_units
+ALTER TABLE property_units ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for anon" ON public.property_units FOR ALL TO anon USING (true) WITH CHECK (true);

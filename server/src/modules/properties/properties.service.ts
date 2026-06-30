@@ -286,6 +286,9 @@ export async function createProperty(ownerId: string, input: CreatePropertyInput
     );
 
     const property = propertyResult.rows[0];
+    if (!property) {
+      throw createHttpError(500, 'internal_error', 'Property could not be created.');
+    }
     const images = input.images.length > 0 ? input.images : [{ url: '', altText: '', isCover: true, sortOrder: 0 }];
 
     const imageResult = await client.query(
