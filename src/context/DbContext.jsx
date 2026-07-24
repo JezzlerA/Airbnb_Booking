@@ -135,6 +135,37 @@ export function DbProvider({ children }) {
     return admin;
   };
 
+  const loginUnified = async (email, password) => {
+    try {
+      const admin = await sdb.loginAdminDb(email, password);
+      if (admin) {
+        setCurrentAdmin(admin);
+        localStorage.setItem('airbnb_active_admin', JSON.stringify(admin));
+        setActiveRole('admin');
+        await sdb.insertActivityLogDb(admin.id, 'Admin Logged In', `${admin.name} (${admin.role}) entered the system.`);
+        await loadAllData();
+        return { role: 'admin', data: admin };
+      }
+    } catch (err) {
+      // Admin lookup failed, fallback to guest user login
+    }
+
+    try {
+      const user = await sdb.loginUserDb(email, password);
+      if (user) {
+        setCurrentUser(user);
+        localStorage.setItem('airbnb_active_user', JSON.stringify(user));
+        setActiveRole('guest');
+        await loadAllData();
+        return { role: 'guest', data: user };
+      }
+    } catch (err) {
+      // Guest lookup failed
+    }
+
+    throw new Error('Invalid email or password.');
+  };
+
   const logout = async () => {
     if (activeRole === 'admin' && currentAdmin) {
       await sdb.insertActivityLogDb(currentAdmin.id, 'Admin Logged Out', `${currentAdmin.name} exited.`);
@@ -484,7 +515,7 @@ export function DbProvider({ children }) {
       properties, propertyUnits, propertyImages, bookings, payments, reviews,
       amenities, notifications, activityLogs, settings,
       // Auth
-      registerUser, registerAdmin, loginUser, loginAdmin, logout, changeAdminPassword,
+      registerUser, registerAdmin, loginUser, loginAdmin, loginUnified, logout, changeAdminPassword,
       // Properties
       addProperty, updateProperty, deleteProperty,
       // Units

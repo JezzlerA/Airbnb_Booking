@@ -27,7 +27,7 @@ propertyRouter.get(
 propertyRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const data = await propertyService.getPropertyById(req.params.id!);
+    const data = await propertyService.getPropertyById(req.params.id as string);
     res.json({ data });
   })
 );
@@ -49,7 +49,7 @@ propertyRouter.patch(
   requireRoles('host', 'admin'),
   validate(propertyService.updatePropertySchema),
   asyncHandler(async (req, res) => {
-    const data = await propertyService.updateProperty(req.params.id!, req.body, req.body.images);
+    const data = await propertyService.updateProperty(req.params.id as string, req.body, req.body.images);
     res.json({ data });
   })
 );
@@ -59,7 +59,7 @@ propertyRouter.delete(
   requireAuth,
   requireRoles('host', 'admin'),
   asyncHandler(async (req, res) => {
-    const data = await propertyService.archiveProperty(req.params.id!);
+    const data = await propertyService.archiveProperty(req.params.id as string);
     res.json({ data });
   })
 );

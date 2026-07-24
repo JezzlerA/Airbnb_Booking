@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DbProvider, useDb } from './context/DbContext';
 import Navbar from './components/Navbar';
+import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
 import CalendarView from './components/CalendarView';
 import AnalyticsCharts from './components/AnalyticsCharts';
 import * as Icons from 'lucide-react';
@@ -62,8 +65,18 @@ function AppContent() {
     );
   }
 
+  // Derive initial tab from current URL path
+  const getTabFromPath = (path) => {
+    if (path === '/login') return 'login';
+    if (path === '/register') return 'register';
+    if (path.startsWith('/guest/dashboard')) return 'guest_dashboard';
+    if (path.startsWith('/admin/dashboard')) return 'admin_dashboard';
+    return 'home';
+  };
+
   // Navigation: 'home' | 'property_detail' | 'guest_dashboard' | 'admin_dashboard' | 'admin_properties' | 'admin_units' | 'admin_bookings' | 'admin_payments' | 'admin_settings' | 'admin_logs' | 'payment_success' | 'payment_cancelled'
-  const [currentTab, setCurrentTab] = useState('home');
+  const [currentTab, setCurrentTab] = useState(() => getTabFromPath(window.location.pathname));
+  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [selectedUnitId, setSelectedUnitId] = useState(null);
 
@@ -160,10 +173,49 @@ function AppContent() {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
 
-  const handleNavigate = (tab) => {
+  const handleNavigate = (tab, path = null) => {
+    let targetPath = path;
+    if (!targetPath) {
+      if (tab === 'home') targetPath = '/';
+      else if (tab === 'login') targetPath = '/login';
+      else if (tab === 'register') targetPath = '/register';
+      else if (tab === 'guest_dashboard') targetPath = '/guest/dashboard';
+      else if (tab.startsWith('admin')) targetPath = '/admin/dashboard';
+      else if (tab === 'property_detail') targetPath = `/property/${selectedPropertyId || ''}`;
+      else targetPath = '/';
+    }
+
+    // Protected Route Enforcement:
+    if (tab === 'guest_dashboard' && !currentUser) {
+      targetPath = '/login';
+      tab = 'login';
+    } else if (tab.startsWith('admin') && activeRole !== 'admin') {
+      targetPath = '/login';
+      tab = 'login';
+    }
+
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+    setCurrentPath(targetPath);
     setCurrentTab(tab);
     window.scrollTo(0, 0);
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      setCurrentPath(path);
+      if (path === '/login') setCurrentTab('login');
+      else if (path === '/register') setCurrentTab('register');
+      else if (path.startsWith('/guest/dashboard')) setCurrentTab('guest_dashboard');
+      else if (path.startsWith('/admin/dashboard')) setCurrentTab('admin_dashboard');
+      else setCurrentTab('home');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const handlePropertySelect = (id) => {
     setSelectedPropertyId(id);
@@ -667,213 +719,33 @@ function AppContent() {
         searchQuery={searchQuery}
         onNavigate={handleNavigate}
         currentTab={currentTab}
+        currentPath={currentPath}
       />
 
       <div className="flex" style={{ flexGrow: 1 }}>
-        {/* Render Admin sidebar if active role is admin */}
-        {activeRole === 'admin' && renderSidebar()}
+        {/* Render Admin sidebar if active role is admin and in admin view */}
+        {activeRole === 'admin' && currentTab.startsWith('admin') && renderSidebar()}
 
-        <main style={{ flexGrow: 1, padding: '32px 0', overflow: 'hidden' }}>
+        <main style={{ flexGrow: 1, padding: currentTab === 'home' ? '0' : '32px 0', overflow: 'hidden' }}>
           <div className="container">
-            {/* GUEST PORTAL: HOMEPAGE */}
-            {currentTab === 'home' && activeRole === 'guest' && (
-              <div className="flex flex-col gap-4">
-                
-                {/* Hero Banner */}
-                <div style={{
-                  backgroundImage: `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.5)), url(${settings.bannerImage})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  height: '350px',
-                  borderRadius: 'var(--radius-lg)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  padding: '48px',
-                  color: 'white',
-                  boxShadow: 'var(--shadow-md)',
-                  marginBottom: '24px'
-                }}>
-                  <h1 style={{ fontSize: '3rem', fontWeight: 800, maxWidth: '600px', lineHeight: 1.15, textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-                    {settings.bannerTitle || 'Discover extraordinary stays.'}
-                  </h1>
-                  <p style={{ fontSize: '1.2rem', marginTop: '16px', maxWidth: '500px', textShadow: '0 2px 8px rgba(0,0,0,0.4)', opacity: 0.9 }}>
-                    {settings.bannerSubtitle || 'Book unique places to live, work, or relax across the globe.'}
-                  </p>
-                </div>
+            {/* PUBLIC LANDING PAGE (DEFAULT ROUTE /) */}
+            {currentTab === 'home' && (
+              <LandingPage
+                onPropertySelect={handlePropertySelect}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onNavigate={handleNavigate}
+              />
+            )}
 
-                {/* Categories Tab Selector */}
-                <div className="category-scroller">
-                  <button
-                    className={`category-tab ${categoryFilter === 'All' ? 'active' : ''}`}
-                    onClick={() => setCategoryFilter('All')}
-                  >
-                    {renderIcon('Globe', 22)}
-                    <span>All Stays</span>
-                  </button>
-                  {(settings.categories || ['Beachfront', 'Cabins', 'Trending', 'Countryside', 'Treehouses', 'Mansions']).map(cat => (
-                    <button
-                      key={cat}
-                      className={`category-tab ${categoryFilter === cat ? 'active' : ''}`}
-                      onClick={() => setCategoryFilter(cat)}
-                    >
-                      {renderIcon(
-                        cat === 'Beachfront' ? 'Waves' : 
-                        cat === 'Cabins' ? 'Home' : 
-                        cat === 'Trending' ? 'TrendingUp' : 
-                        cat === 'Countryside' ? 'Wind' : 'Tree'
-                      , 22)}
-                      <span>{cat}</span>
-                    </button>
-                  ))}
-                </div>
+            {/* DEDICATED LOGIN PAGE (/login) */}
+            {currentTab === 'login' && (
+              <LoginPage onNavigate={handleNavigate} />
+            )}
 
-                {/* Main Content Area: Filters + Grid */}
-                <div className="flex flex-mobile-col gap-4">
-                  {/* Left Filters Panel */}
-                  <div className="glass" style={{
-                    width: '300px',
-                    padding: '24px',
-                    borderRadius: 'var(--radius-md)',
-                    height: 'fit-content',
-                    position: 'sticky',
-                    top: '100px',
-                    flexShrink: 0
-                  }}>
-                    <h4 style={{ marginBottom: '18px' }}>Filters</h4>
-                    
-                    {/* Price Filter */}
-                    <div className="input-group" style={{ marginBottom: '24px' }}>
-                      <div className="flex justify-between" style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        <span>Max Price per Night</span>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>₱{priceFilter}</span>
-                      </div>
-                        <input
-                          type="range"
-                          min="50"
-                          max="100000"
-                          step="10"
-                          value={priceFilter}
-                          onChange={(e) => setPriceFilter(Number(e.target.value))}
-                          style={{ accentColor: 'var(--color-primary)', cursor: 'pointer', marginTop: '8px' }}
-                        />
-                    </div>
-
-                    {/* Amenities Checklist */}
-                    <div className="input-group">
-                      <label style={{ marginBottom: '10px' }}>Amenities</label>
-                      <div className="flex flex-col gap-1">
-                        {amenities.map(a => (
-                          <label key={a.id} className="flex align-center gap-2" style={{ fontSize: '0.9rem', cursor: 'pointer', padding: '4px 0' }}>
-                             <input
-                              type="checkbox"
-                              checked={selectedAmenities.includes(a.id)}
-                              onChange={() => toggleAmenityFilter(a.id)}
-                              style={{ accentColor: 'var(--color-primary)', cursor: 'pointer' }}
-                            />
-                            {a.name}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Listings Grid */}
-                  <div style={{ flexGrow: 1 }}>
-                    <div className="flex justify-between align-center" style={{ marginBottom: '16px' }}>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 600 }}>
-                        Showing {filteredProperties.length} extraordinary stays
-                      </span>
-                    </div>
-
-                    {filteredProperties.length === 0 ? (
-                      <div className="glass" style={{ textAlign: 'center', padding: '64px', borderRadius: 'var(--radius-md)' }}>
-                        <Icons.AlertCircle size={48} style={{ color: 'var(--text-tertiary)', marginBottom: '16px' }} />
-                        <h3>No properties found</h3>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Try widening your search terms or filter constraints.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-3">
-                        {filteredProperties.map(p => {
-                          const coverImg = propertyImages.find(img => img.propertyId === p.id && img.isCover)?.url || '/beach_villa.png';
-                          const avgRating = getAverageRating(p.id);
-
-                          return (
-                            <div key={p.id} className="property-card" style={{ cursor: 'pointer' }} onClick={() => handlePropertySelect(p.id)}>
-                              <div className="property-card-image-container">
-                                <img src={coverImg} alt={p.title} className="property-card-image" />
-                                <div className="property-card-heart">
-                                  <Icons.Heart size={20} fill="rgba(0,0,0,0.3)" />
-                                </div>
-                              </div>
-                              <div className="property-card-info">
-                                <div className="property-card-header">
-                                  <h4 className="property-card-title">{p.title}</h4>
-                                  <div className="property-card-rating">
-                                    <Icons.Star size={14} fill="var(--color-warning)" stroke="var(--color-warning)" />
-                                    <span>{avgRating}</span>
-                                  </div>
-                                </div>
-                                <div className="property-card-location">{p.location.city}, {p.location.country}</div>
-                                <div className="property-card-details">
-                                  {p.beds} beds • {p.baths} baths • {p.guests} guests
-                                </div>
-                                <div className="property-card-price-row">
-                                  <div className="property-card-price">
-                                    ₱{p.pricePerNight} <span>/ night</span>
-                                  </div>
-                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 600 }}>Instant Book</span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* FAQ Section */}
-                <div className="glass" style={{ padding: '32px', borderRadius: 'var(--radius-md)', marginTop: '48px' }}>
-                  <h3 style={{ textAlign: 'center', marginBottom: '32px' }}>Frequently Asked Questions</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {settingsFaqs.map(faq => (
-                      <div key={faq.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <h4 style={{ fontSize: '1.05rem', color: 'var(--text-primary)' }}>{faq.question}</h4>
-                        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{faq.answer}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Footer block */}
-                <footer className="glass" style={{ marginTop: '64px', borderRadius: 'var(--radius-md) var(--radius-md) 0 0', padding: '48px 24px', borderBottom: 'none' }}>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div>
-                      <h4 style={{ marginBottom: '16px' }}>{settings.logoText}</h4>
-                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Premium vacation rental management software inspired by clean minimalism.</p>
-                    </div>
-                    <div>
-                      <h4 style={{ marginBottom: '16px' }}>Support Contacts</h4>
-                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Email: {settings.contactEmail}</p>
-                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Phone: {settings.contactPhone}</p>
-                    </div>
-                    <div>
-                      <h4 style={{ marginBottom: '16px' }}>Social Presence</h4>
-                      <div className="flex gap-2">
-                        <a href="#" className="btn-icon" title="Facebook"><Icons.Share2 size={18} /></a>
-                        <a href="#" className="btn-icon" title="Instagram"><Icons.Camera size={18} /></a>
-                        <a href="#" className="btn-icon" title="Twitter"><Icons.MessageSquare size={18} /></a>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 style={{ marginBottom: '16px' }}>Legal</h4>
-                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>Terms of Service</p>
-                      <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>Privacy Policy</p>
-                    </div>
-                  </div>
-                </footer>
-              </div>
+            {/* DEDICATED REGISTER PAGE (/register) */}
+            {currentTab === 'register' && (
+              <RegisterPage onNavigate={handleNavigate} />
             )}
 
             {/* GUEST PORTAL: PROPERTY DETAIL PAGE */}
