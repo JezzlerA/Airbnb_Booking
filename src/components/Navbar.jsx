@@ -11,8 +11,7 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
     settings,
     logout,
     markNotificationsRead,
-    clearNotifications,
-    loginAdmin
+    clearNotifications
   } = useDb();
 
   const [theme, setTheme] = useState(() => localStorage.getItem('airbnb_theme') || 'light');
@@ -79,6 +78,13 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
     return <IconComponent size={size} />;
   };
 
+  // Determine auth state
+  const isAuthenticated = !!(currentUser || (activeRole === 'admin' && currentAdmin));
+  const isGuest = activeRole === 'guest' && !!currentUser;
+  const isAdmin = activeRole === 'admin' && !!currentAdmin;
+  const isOnGuestDashboard = currentTab.startsWith('guest');
+  const isOnAdminDashboard = currentTab.startsWith('admin');
+
   return (
     <>
       <header className="glass" style={{
@@ -101,44 +107,81 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
             </span>
           </div>
 
-          {/* Center Navigation Links (Public Landing Page Sections) */}
-          <nav className="no-print flex align-center gap-1" style={{ display: currentTab === 'home' ? 'flex' : 'none' }}>
-            <button 
-              className={`nav-link ${activeSection === 'hero' && currentTab === 'home' ? 'active' : ''}`}
-              onClick={() => handleNavClick('hero', 'home', '/')}
-            >
-              Home
-            </button>
-            <button 
-              className={`nav-link ${activeSection === 'properties' ? 'active' : ''}`}
-              onClick={() => handleNavClick('properties', 'home', '/')}
-            >
-              Properties
-            </button>
-            <button 
-              className={`nav-link ${activeSection === 'about' ? 'active' : ''}`}
-              onClick={() => handleNavClick('about', 'home', '/')}
-            >
-              About Us
-            </button>
-            <button 
-              className={`nav-link ${activeSection === 'amenities' ? 'active' : ''}`}
-              onClick={() => handleNavClick('amenities', 'home', '/')}
-            >
-              Amenities
-            </button>
-            <button 
-              className={`nav-link ${activeSection === 'reviews' ? 'active' : ''}`}
-              onClick={() => handleNavClick('reviews', 'home', '/')}
-            >
-              Reviews
-            </button>
-            <button 
-              className={`nav-link ${activeSection === 'contact' ? 'active' : ''}`}
-              onClick={() => handleNavClick('contact', 'home', '/')}
-            >
-              Contact
-            </button>
+          {/* Center Navigation Links — changes based on role and context */}
+          <nav className="no-print flex align-center gap-1" style={{ display: 'flex' }}>
+            {/* PUBLIC: Show landing page section links when on home/login/register and not on a dashboard */}
+            {!isOnGuestDashboard && !isOnAdminDashboard && (
+              <>
+                <button 
+                  className={`nav-link ${activeSection === 'hero' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('hero', 'home', '/')}
+                >
+                  Home
+                </button>
+                <button 
+                  className={`nav-link ${activeSection === 'properties' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('properties', 'home', '/')}
+                >
+                  Properties
+                </button>
+                <button 
+                  className={`nav-link ${activeSection === 'about' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('about', 'home', '/')}
+                >
+                  About Us
+                </button>
+                <button 
+                  className={`nav-link ${activeSection === 'amenities' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('amenities', 'home', '/')}
+                >
+                  Amenities
+                </button>
+                <button 
+                  className={`nav-link ${activeSection === 'reviews' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('reviews', 'home', '/')}
+                >
+                  Reviews
+                </button>
+                <button 
+                  className={`nav-link ${activeSection === 'contact' && currentTab === 'home' ? 'active' : ''}`}
+                  onClick={() => handleNavClick('contact', 'home', '/')}
+                >
+                  Contact
+                </button>
+              </>
+            )}
+
+            {/* GUEST DASHBOARD: Show guest-specific nav links */}
+            {isGuest && isOnGuestDashboard && (
+              <>
+                <button
+                  className={`nav-link ${currentTab === 'guest_dashboard' ? 'active' : ''}`}
+                  onClick={() => handleNavClick(null, 'guest_dashboard', '/guest/dashboard')}
+                >
+                  Dashboard
+                </button>
+                <button
+                  className={`nav-link ${currentTab === 'guest_properties' ? 'active' : ''}`}
+                  onClick={() => handleNavClick(null, 'guest_properties', '/guest/dashboard')}
+                >
+                  Browse Properties
+                </button>
+                <button
+                  className={`nav-link ${currentTab === 'guest_bookings' ? 'active' : ''}`}
+                  onClick={() => handleNavClick(null, 'guest_bookings', '/guest/dashboard')}
+                >
+                  My Bookings
+                </button>
+                <button
+                  className={`nav-link ${currentTab === 'guest_payments' ? 'active' : ''}`}
+                  onClick={() => handleNavClick(null, 'guest_payments', '/guest/dashboard')}
+                >
+                  Payments
+                </button>
+              </>
+            )}
+
+            {/* ADMIN DASHBOARD: center nav hidden — admin uses sidebar */}
           </nav>
 
           {/* Action Row */}
@@ -148,8 +191,19 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
               {theme === 'light' ? <Icons.Moon size={20} /> : <Icons.Sun size={20} />}
             </button>
 
+            {/* Admin: System Settings shortcut */}
+            {isAdmin && (
+              <button
+                className="btn-icon"
+                onClick={() => handleNavClick(null, 'admin_settings', '/admin/dashboard')}
+                title="System Settings"
+              >
+                <Icons.Settings size={20} />
+              </button>
+            )}
+
             {/* Notification Bell (Only if authenticated) */}
-            {(currentUser || (activeRole === 'admin' && currentAdmin)) && (
+            {isAuthenticated && (
               <div style={{ position: 'relative' }}>
                 <button className="btn-icon" onClick={() => {
                   setShowNotifications(!showNotifications);
@@ -224,7 +278,7 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
             )}
 
             {/* Authentication Action Buttons (If Unauthenticated) */}
-            {!currentUser && !(activeRole === 'admin' && currentAdmin) ? (
+            {!isAuthenticated ? (
               <div className="flex align-center gap-2">
                 <button 
                   className={`btn btn-secondary ${currentTab === 'login' ? 'active' : ''}`}
@@ -256,7 +310,7 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
                   }}
                 >
                   <Icons.Menu size={16} style={{ color: 'var(--text-secondary)' }} />
-                  {activeRole === 'admin' && currentAdmin ? (
+                  {isAdmin ? (
                     <div style={{
                       width: '30px',
                       height: '30px',
@@ -285,7 +339,7 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
                     position: 'absolute',
                     top: '48px',
                     right: 0,
-                    width: '220px',
+                    width: '240px',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
                     border: '1px solid var(--border-color)',
@@ -294,38 +348,57 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
                     display: 'flex',
                     flexDirection: 'column'
                   }}>
-                    {/* User Context */}
-                    {activeRole === 'admin' && currentAdmin ? (
-                      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+                    {/* User Identity Context */}
+                    {isAdmin ? (
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
                         <p style={{ fontWeight: 700 }}>{currentAdmin.name}</p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--color-success)', fontWeight: 600 }}>{currentAdmin.role}</p>
                       </div>
                     ) : (currentUser ? (
-                      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
-                        <p style={{ fontWeight: 700 }}>{currentUser.name}</p>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{currentUser.email}</p>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+                        <div className="flex align-center gap-2">
+                          <img src={currentUser.avatar} alt="avatar" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                          <div>
+                            <p style={{ fontWeight: 700 }}>{currentUser.name}</p>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{currentUser.email}</p>
+                          </div>
+                        </div>
                       </div>
                     ) : null)}
 
-                    {/* Navigation Options */}
-                    <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px' }} onClick={() => handleNavClick(null, 'home', '/')}>
-                      Public Homepage
+                    {/* Role-specific Navigation Options */}
+                    <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'home', '/')}>
+                      <Icons.Globe size={16} /> Public Homepage
                     </button>
 
-                    {activeRole === 'admin' && currentAdmin ? (
+                    {isAdmin ? (
                       <>
-                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px' }} onClick={() => handleNavClick(null, 'admin_dashboard', '/admin/dashboard')}>
-                          Admin Dashboard
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'admin_dashboard', '/admin/dashboard')}>
+                          <Icons.LayoutDashboard size={16} /> Admin Dashboard
                         </button>
-                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px' }} onClick={() => handleNavClick(null, 'admin_properties', '/admin/dashboard')}>
-                          Manage Properties
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'admin_properties', '/admin/dashboard')}>
+                          <Icons.Home size={16} /> Properties
+                        </button>
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'admin_settings', '/admin/dashboard')}>
+                          <Icons.Settings size={16} /> Website Settings
                         </button>
                       </>
-                    ) : (currentUser ? (
-                      <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px' }} onClick={() => handleNavClick(null, 'guest_dashboard', '/guest/dashboard')}>
-                        My Guest Dashboard
-                      </button>
-                    ) : null)}
+                    ) : isGuest ? (
+                      <>
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'guest_dashboard', '/guest/dashboard')}>
+                          <Icons.LayoutDashboard size={16} /> Guest Dashboard
+                        </button>
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'guest_properties', '/guest/dashboard')}>
+                          <Icons.Search size={16} /> Browse Properties
+                        </button>
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'guest_bookings', '/guest/dashboard')}>
+                          <Icons.CalendarCheck size={16} /> My Bookings
+                        </button>
+                        <button className="btn-text" style={{ textAlign: 'left', width: '100%', fontSize: '0.9rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavClick(null, 'guest_profile', '/guest/dashboard')}>
+                          <Icons.User size={16} /> My Profile
+                        </button>
+                      </>
+                    ) : null}
 
                     <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '8px 0' }} />
 
@@ -361,103 +434,122 @@ export default function Navbar({ onSearchChange, searchQuery, onNavigate, curren
         `}</style>
       </header>
 
-      {/* Mobile Navigation Drawer */}
+      {/* Mobile Navigation Drawer — Role-Aware */}
       {mobileMenuOpen && (
         <div className="mobile-nav-drawer no-print">
-          <button className="nav-link" onClick={() => handleNavClick('hero', 'home', '/')}>Home</button>
-          <button className="nav-link" onClick={() => handleNavClick('properties', 'home', '/')}>Properties</button>
-          <button className="nav-link" onClick={() => handleNavClick('about', 'home', '/')}>About Us</button>
-          <button className="nav-link" onClick={() => handleNavClick('amenities', 'home', '/')}>Amenities</button>
-          <button className="nav-link" onClick={() => handleNavClick('reviews', 'home', '/')}>Reviews</button>
-          <button className="nav-link" onClick={() => handleNavClick('contact', 'home', '/')}>Contact</button>
+          {/* Unauthenticated: show public landing links + Login/Register */}
+          {!isAuthenticated && (
+            <>
+              <button className="nav-link" onClick={() => handleNavClick('hero', 'home', '/')}>Home</button>
+              <button className="nav-link" onClick={() => handleNavClick('properties', 'home', '/')}>Properties</button>
+              <button className="nav-link" onClick={() => handleNavClick('about', 'home', '/')}>About Us</button>
+              <button className="nav-link" onClick={() => handleNavClick('amenities', 'home', '/')}>Amenities</button>
+              <button className="nav-link" onClick={() => handleNavClick('reviews', 'home', '/')}>Reviews</button>
+              <button className="nav-link" onClick={() => handleNavClick('contact', 'home', '/')}>Contact</button>
 
-          <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
 
-          {!currentUser && !(activeRole === 'admin' && currentAdmin) ? (
-            <div className="flex flex-col gap-2" style={{ marginTop: '12px' }}>
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => handleNavClick(null, 'login', '/login')} 
-                style={{ width: '100%' }}
-              >
-                Login
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={() => handleNavClick(null, 'register', '/register')} 
-                style={{ width: '100%' }}
-              >
-                Register
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2" style={{ marginTop: '12px' }}>
-              {activeRole === 'admin' ? (
-                <button className="btn btn-primary" onClick={() => handleNavClick(null, 'admin_dashboard', '/admin/dashboard')}>
-                  Go to Admin Dashboard
+              <div className="flex flex-col gap-2" style={{ marginTop: '12px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => handleNavClick(null, 'login', '/login')} 
+                  style={{ width: '100%' }}
+                >
+                  Login
                 </button>
-              ) : (
-                <button className="btn btn-primary" onClick={() => handleNavClick(null, 'guest_dashboard', '/guest/dashboard')}>
-                  Go to Guest Dashboard
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => handleNavClick(null, 'register', '/register')} 
+                  style={{ width: '100%' }}
+                >
+                  Register
                 </button>
-              )}
-              <button className="btn btn-secondary" onClick={() => { logout(); setMobileMenuOpen(false); handleNavClick(null, 'home', '/'); }}>
-                Sign Out
+              </div>
+            </>
+          )}
+
+          {/* Guest Authenticated: show guest-specific mobile nav */}
+          {isGuest && (
+            <>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_dashboard', '/guest/dashboard')}>
+                <Icons.LayoutDashboard size={16} /> Dashboard
               </button>
-            </div>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_properties', '/guest/dashboard')}>
+                <Icons.Search size={16} /> Browse Properties
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_bookings', '/guest/dashboard')}>
+                <Icons.CalendarCheck size={16} /> My Bookings
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_payments', '/guest/dashboard')}>
+                <Icons.CreditCard size={16} /> Payment History
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_profile', '/guest/dashboard')}>
+                <Icons.User size={16} /> My Profile
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'guest_notifications', '/guest/dashboard')}>
+                <Icons.Bell size={16} /> Notifications
+              </button>
+
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+
+              <button className="nav-link" onClick={() => handleNavClick('hero', 'home', '/')}>
+                <Icons.Globe size={16} /> Public Homepage
+              </button>
+
+              <div style={{ marginTop: '12px' }}>
+                <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => { logout(); setMobileMenuOpen(false); handleNavClick(null, 'home', '/'); }}>
+                  <Icons.LogOut size={16} /> Sign Out
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Admin Authenticated: show admin-specific mobile nav */}
+          {isAdmin && (
+            <>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_dashboard', '/admin/dashboard')}>
+                <Icons.LayoutDashboard size={16} /> Dashboard
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_properties', '/admin/dashboard')}>
+                <Icons.Home size={16} /> Properties
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_units', '/admin/dashboard')}>
+                <Icons.Box size={16} /> Units
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_bookings', '/admin/dashboard')}>
+                <Icons.Calendar size={16} /> Bookings
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_payments', '/admin/dashboard')}>
+                <Icons.CreditCard size={16} /> Payments
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_reviews', '/admin/dashboard')}>
+                <Icons.Star size={16} /> Reviews
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_reports', '/admin/dashboard')}>
+                <Icons.BarChart3 size={16} /> Reports
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_settings', '/admin/dashboard')}>
+                <Icons.Settings size={16} /> Website Settings
+              </button>
+              <button className="nav-link" onClick={() => handleNavClick(null, 'admin_logs', '/admin/dashboard')}>
+                <Icons.Lock size={16} /> Activity Logs
+              </button>
+
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)' }} />
+
+              <button className="nav-link" onClick={() => handleNavClick('hero', 'home', '/')}>
+                <Icons.Globe size={16} /> Public Homepage
+              </button>
+
+              <div style={{ marginTop: '12px' }}>
+                <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => { logout(); setMobileMenuOpen(false); handleNavClick(null, 'home', '/'); }}>
+                  <Icons.LogOut size={16} /> Sign Out
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}
-
-      {/* Developer floating Controller Bar */}
-      <div className="dev-controller glass no-print" style={{
-        position: 'fixed',
-        bottom: '16px',
-        right: '16px',
-        zIndex: 990,
-        padding: '8px 16px',
-        borderRadius: 'var(--radius-pill)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        boxShadow: 'var(--shadow-lg)'
-      }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Demo Switcher:</span>
-        <button
-          onClick={() => {
-            onNavigate('home', '/');
-          }}
-          className={`btn ${currentTab === 'home' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: 'var(--radius-pill)' }}
-        >
-          <Icons.Globe size={14} /> Public Landing Page
-        </button>
-        <button
-          onClick={() => {
-            if (!currentUser) {
-              onNavigate('login', '/login');
-            } else {
-              onNavigate('guest_dashboard', '/guest/dashboard');
-            }
-          }}
-          className={`btn ${currentTab === 'guest_dashboard' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: 'var(--radius-pill)' }}
-        >
-          <Icons.UserCheck size={14} /> Guest Dashboard
-        </button>
-        <button
-          onClick={async () => {
-            if (!currentAdmin) {
-              await loginAdmin('admin@booking.com', 'admin123');
-            }
-            onNavigate('admin_dashboard', '/admin/dashboard');
-          }}
-          className={`btn ${currentTab.startsWith('admin') ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: 'var(--radius-pill)', backgroundColor: currentTab.startsWith('admin') ? 'var(--color-success)' : undefined }}
-        >
-          <Icons.ShieldAlert size={14} /> Admin Dashboard
-        </button>
-      </div>
     </>
   );
 }

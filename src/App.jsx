@@ -179,19 +179,31 @@ function AppContent() {
       if (tab === 'home') targetPath = '/';
       else if (tab === 'login') targetPath = '/login';
       else if (tab === 'register') targetPath = '/register';
-      else if (tab === 'guest_dashboard') targetPath = '/guest/dashboard';
+      else if (tab.startsWith('guest')) targetPath = '/guest/dashboard';
       else if (tab.startsWith('admin')) targetPath = '/admin/dashboard';
       else if (tab === 'property_detail') targetPath = `/property/${selectedPropertyId || ''}`;
       else targetPath = '/';
     }
 
-    // Protected Route Enforcement:
-    if (tab === 'guest_dashboard' && !currentUser) {
-      targetPath = '/login';
-      tab = 'login';
-    } else if (tab.startsWith('admin') && activeRole !== 'admin') {
-      targetPath = '/login';
-      tab = 'login';
+    // Role-Based Access Control (RBAC) Route Protection:
+    if (tab.startsWith('admin')) {
+      if (activeRole !== 'admin' || !currentAdmin) {
+        if (currentUser) {
+          targetPath = '/guest/dashboard';
+          tab = 'guest_dashboard';
+        } else {
+          targetPath = '/login';
+          tab = 'login';
+        }
+      }
+    } else if (tab.startsWith('guest')) {
+      if (activeRole === 'admin' && currentAdmin) {
+        targetPath = '/admin/dashboard';
+        tab = 'admin_dashboard';
+      } else if (!currentUser) {
+        targetPath = '/login';
+        tab = 'login';
+      }
     }
 
     if (window.location.pathname !== targetPath) {
@@ -208,14 +220,22 @@ function AppContent() {
       setCurrentPath(path);
       if (path === '/login') setCurrentTab('login');
       else if (path === '/register') setCurrentTab('register');
-      else if (path.startsWith('/guest/dashboard')) setCurrentTab('guest_dashboard');
-      else if (path.startsWith('/admin/dashboard')) setCurrentTab('admin_dashboard');
-      else setCurrentTab('home');
+      else if (path.startsWith('/guest/dashboard')) {
+        if (activeRole === 'admin' && currentAdmin) setCurrentTab('admin_dashboard');
+        else if (currentUser) setCurrentTab('guest_dashboard');
+        else setCurrentTab('login');
+      } else if (path.startsWith('/admin/dashboard')) {
+        if (activeRole === 'admin' && currentAdmin) setCurrentTab('admin_dashboard');
+        else if (currentUser) setCurrentTab('guest_dashboard');
+        else setCurrentTab('login');
+      } else {
+        setCurrentTab('home');
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [activeRole, currentUser, currentAdmin]);
 
   const handlePropertySelect = (id) => {
     setSelectedPropertyId(id);
@@ -635,16 +655,18 @@ function AppContent() {
     document.body.removeChild(link);
   };
 
-  // View Switcher logic
-  const renderSidebar = () => {
+  // Admin Sidebar component
+  const renderAdminSidebar = () => {
     const tabs = [
-      { id: 'admin_dashboard', label: 'Overview Metrics', icon: 'LayoutDashboard' },
-      { id: 'admin_properties', label: 'Properties Manager', icon: 'Home' },
-      { id: 'admin_units', label: 'Unit Management', icon: 'Box' },
-      { id: 'admin_bookings', label: 'Reservations Timeline', icon: 'Calendar' },
-      { id: 'admin_payments', label: 'Payment Management', icon: 'CreditCard' },
-      { id: 'admin_settings', label: 'Website Customizer', icon: 'Settings' },
-      { id: 'admin_logs', label: 'Security & Logs', icon: 'Lock' }
+      { id: 'admin_dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+      { id: 'admin_properties', label: 'Properties', icon: 'Home' },
+      { id: 'admin_units', label: 'Units', icon: 'Box' },
+      { id: 'admin_bookings', label: 'Bookings', icon: 'Calendar' },
+      { id: 'admin_payments', label: 'Payments', icon: 'CreditCard' },
+      { id: 'admin_reviews', label: 'Reviews', icon: 'Star' },
+      { id: 'admin_reports', label: 'Reports', icon: 'BarChart3' },
+      { id: 'admin_settings', label: 'Website Settings', icon: 'Settings' },
+      { id: 'admin_logs', label: 'Activity Logs', icon: 'Lock' }
     ];
 
     return (
@@ -653,34 +675,123 @@ function AppContent() {
         padding: '24px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
+        gap: '4px',
         height: 'calc(100vh - var(--header-height))',
         position: 'sticky',
         top: 'var(--header-height)',
         borderRight: '1px solid var(--border-color)'
       }}>
-        <div style={{ padding: '0 8px 16px 8px', borderBottom: '1px solid var(--border-color)', marginBottom: '16px' }}>
-          <h4 style={{ margin: 0, fontSize: '1.1rem' }}>Admin Dashboard</h4>
-          <span style={{ fontSize: '0.78rem', color: 'var(--color-success)', fontWeight: 600 }}>Role-Based Access: On</span>
+        <div style={{ padding: '0 8px 16px 8px', borderBottom: '1px solid var(--border-color)', marginBottom: '12px' }}>
+          <h4 style={{ margin: 0, fontSize: '1.05rem' }}>Admin Dashboard</h4>
+          <span style={{ fontSize: '0.78rem', color: 'var(--color-success)', fontWeight: 600 }}>Administrator Role</span>
         </div>
 
-        {tabs.map(t => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1, overflowY: 'auto' }}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => handleNavigate(t.id, '/admin/dashboard')}
+              className="btn"
+              style={{
+                justifyContent: 'flex-start',
+                padding: '10px 14px',
+                fontSize: '0.88rem',
+                backgroundColor: currentTab === t.id ? 'var(--color-primary-light)' : 'transparent',
+                color: currentTab === t.id ? 'var(--color-primary)' : 'var(--text-secondary)'
+              }}
+            >
+              {renderIcon(t.icon, 18)}
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto' }}>
           <button
-            key={t.id}
-            onClick={() => handleNavigate(t.id)}
+            onClick={() => { logout(); handleNavigate('home', '/'); }}
             className="btn"
             style={{
               justifyContent: 'flex-start',
-              padding: '12px 16px',
+              padding: '10px 14px',
               fontSize: '0.88rem',
-              backgroundColor: currentTab === t.id ? 'var(--color-primary-light)' : 'transparent',
-              color: currentTab === t.id ? 'var(--color-primary)' : 'var(--text-secondary)'
+              width: '100%',
+              backgroundColor: 'transparent',
+              color: 'var(--color-danger)'
             }}
           >
-            {renderIcon(t.icon, 18)}
-            {t.label}
+            {renderIcon('LogOut', 18)}
+            Logout
           </button>
-        ))}
+        </div>
+      </aside>
+    );
+  };
+
+  // Guest Sidebar component
+  const renderGuestSidebar = () => {
+    const tabs = [
+      { id: 'guest_dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+      { id: 'guest_properties', label: 'Browse Properties', icon: 'Search' },
+      { id: 'guest_bookings', label: 'My Bookings', icon: 'CalendarCheck' },
+      { id: 'guest_payments', label: 'Payment History', icon: 'CreditCard' },
+      { id: 'guest_profile', label: 'Profile', icon: 'User' },
+      { id: 'guest_notifications', label: 'Notifications', icon: 'Bell' }
+    ];
+
+    return (
+      <aside className="glass no-print" style={{
+        width: '260px',
+        padding: '24px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        height: 'calc(100vh - var(--header-height))',
+        position: 'sticky',
+        top: 'var(--header-height)',
+        borderRight: '1px solid var(--border-color)'
+      }}>
+        <div style={{ padding: '0 8px 16px 8px', borderBottom: '1px solid var(--border-color)', marginBottom: '12px' }}>
+          <h4 style={{ margin: 0, fontSize: '1.05rem' }}>Guest Portal</h4>
+          <span style={{ fontSize: '0.78rem', color: 'var(--color-primary)', fontWeight: 600 }}>Guest Account</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1, overflowY: 'auto' }}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => handleNavigate(t.id, '/guest/dashboard')}
+              className="btn"
+              style={{
+                justifyContent: 'flex-start',
+                padding: '10px 14px',
+                fontSize: '0.88rem',
+                backgroundColor: currentTab === t.id ? 'var(--color-primary-light)' : 'transparent',
+                color: currentTab === t.id ? 'var(--color-primary)' : 'var(--text-secondary)'
+              }}
+            >
+              {renderIcon(t.icon, 18)}
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: 'auto' }}>
+          <button
+            onClick={() => { logout(); handleNavigate('home', '/'); }}
+            className="btn"
+            style={{
+              justifyContent: 'flex-start',
+              padding: '10px 14px',
+              fontSize: '0.88rem',
+              width: '100%',
+              backgroundColor: 'transparent',
+              color: 'var(--color-danger)'
+            }}
+          >
+            {renderIcon('LogOut', 18)}
+            Logout
+          </button>
+        </div>
       </aside>
     );
   };
@@ -724,7 +835,10 @@ function AppContent() {
 
       <div className="flex" style={{ flexGrow: 1 }}>
         {/* Render Admin sidebar if active role is admin and in admin view */}
-        {activeRole === 'admin' && currentTab.startsWith('admin') && renderSidebar()}
+        {activeRole === 'admin' && currentAdmin && currentTab.startsWith('admin') && renderAdminSidebar()}
+
+        {/* Render Guest sidebar if active role is guest and in guest view */}
+        {activeRole === 'guest' && currentUser && currentTab.startsWith('guest') && renderGuestSidebar()}
 
         <main style={{ flexGrow: 1, padding: currentTab === 'home' ? '0' : '32px 0', overflow: 'hidden' }}>
           <div className="container">
@@ -1088,94 +1202,256 @@ function AppContent() {
               })()
             )}
 
-            {/* GUEST PORTAL: GUEST RESERVATION DASHBOARD */}
-            {currentTab === 'guest_dashboard' && activeRole === 'guest' && currentUser && (
-              <div className="flex flex-col gap-3">
-                <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-                  <h2>Guest Profile Dashboard</h2>
-                  <p style={{ color: 'var(--text-secondary)' }}>Manage your stay schedules, verify receipts, and check transaction logs.</p>
-                </div>
+            {/* GUEST PORTAL PANELS */}
+            {activeRole === 'guest' && currentUser && currentTab.startsWith('guest') && (
+              <>
+                {/* GUEST DASHBOARD OVERVIEW */}
+                {currentTab === 'guest_dashboard' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Guest Dashboard</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Welcome back, {currentUser.name}! Overview your stay schedules, receipts, and recent account activity.</p>
+                    </div>
 
-                {/* Profile card summary */}
-                <div className="glass" style={{ padding: '24px', borderRadius: 'var(--radius-md)', display: 'flex', gap: '24px', alignItems: 'center' }}>
-                  <img src={currentUser.avatar} alt="avatar" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }} />
-                  <div>
-                    <h3 style={{ margin: 0 }}>{currentUser.name}</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{currentUser.email} • {currentUser.phone}</p>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                      <span className="badge badge-success">Email Verified</span>
-                      <span className="badge badge-info">ID Authenticated</span>
+                    {/* Quick Stats Grid */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>TOTAL BOOKINGS</span>
+                          <Icons.CalendarCheck size={20} style={{ color: 'var(--color-primary)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>{bookings.filter(b => b.userId === currentUser.id).length}</h2>
+                      </div>
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PAYMENTS RECORDED</span>
+                          <Icons.CreditCard size={20} style={{ color: 'var(--color-success)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 0 0' }}>{payments.filter(p => bookings.some(b => b.id === p.bookingId && b.userId === currentUser.id)).length}</h2>
+                      </div>
+                      <div className="glass card-stat" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                        <div className="flex justify-between align-center">
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>ACCOUNT STATUS</span>
+                          <Icons.UserCheck size={20} style={{ color: 'var(--color-info)' }} />
+                        </div>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '14px 0 0 0', color: 'var(--color-success)' }}>Active Guest</h2>
+                      </div>
+                    </div>
+
+                    {/* Recent Bookings preview */}
+                    <div style={{ marginTop: '16px' }}>
+                      <div className="flex justify-between align-center" style={{ marginBottom: '16px' }}>
+                        <h3>Recent Stay Activity</h3>
+                        <button className="btn btn-secondary" onClick={() => handleNavigate('guest_bookings')}>
+                          View All Bookings <Icons.ArrowRight size={14} />
+                        </button>
+                      </div>
+                      {bookings.filter(b => b.userId === currentUser.id).length === 0 ? (
+                        <div className="glass" style={{ padding: '32px', textAlign: 'center', borderRadius: 'var(--radius-md)' }}>
+                          <Icons.Calendar size={32} style={{ color: 'var(--text-tertiary)', marginBottom: '12px' }} />
+                          <p style={{ color: 'var(--text-secondary)' }}>You haven't reserved any property yet.</p>
+                          <button className="btn btn-primary" style={{ marginTop: '12px' }} onClick={() => handleNavigate('guest_properties')}>
+                            Browse Properties
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {bookings.filter(b => b.userId === currentUser.id).slice(0, 3).map(b => {
+                            const prop = properties.find(p => p.id === b.propertyId);
+                            const unit = propertyUnits.find(u => u.id === b.unitId);
+                            return (
+                              <div key={b.id} className="glass" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <h4 style={{ margin: 0 }}>{prop?.title || 'Property Stay'} ({unit?.unitName || 'Unit'})</h4>
+                                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{b.checkIn} to {b.checkOut} • ₱{b.totalPrice.toLocaleString()}</span>
+                                </div>
+                                <button className="btn btn-secondary" onClick={() => setSelectedReceiptBooking(b)}>
+                                  Receipt
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Bookings table */}
-                <div style={{ marginTop: '24px' }}>
-                  <h3 style={{ marginBottom: '16px' }}>My Stays History</h3>
-                  
-                  {bookings.filter(b => b.userId === currentUser.id).length === 0 ? (
-                    <div className="glass" style={{ padding: '32px', textAlign: 'center', borderRadius: 'var(--radius-md)' }}>
-                      <Icons.Calendar size={32} style={{ color: 'var(--text-tertiary)', marginBottom: '12px' }} />
-                      <p style={{ color: 'var(--text-secondary)' }}>You haven't reserved any property yet.</p>
+                {/* GUEST BROWSE PROPERTIES */}
+                {currentTab === 'guest_properties' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Browse Available Properties</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Explore luxury villas, seaside escapes, and mountain cabins available for direct booking.</p>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {bookings.filter(b => b.userId === currentUser.id).map(b => {
-                        const prop = properties.find(p => p.id === b.propertyId);
-                        const unit = propertyUnits.find(u => u.id === b.unitId);
-                        const pay = payments.find(py => py.bookingId === b.id);
-                        
-                        return (
-                          <div key={b.id} className="glass" style={{
-                            padding: '20px',
-                            borderRadius: 'var(--radius-md)',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div className="flex flex-col gap-1">
-                              <h4 style={{ margin: 0 }}>{prop?.title || 'Luxury Retreat'} - <span style={{ color: 'var(--color-primary)' }}>{unit?.unitName || 'Entire Stay'}</span></h4>
-                              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                Dates: <strong>{b.checkIn}</strong> to <strong>{b.checkOut}</strong> • {b.guestsCount} guests
-                              </p>
-<div className="flex gap-2 align-center" style={{ marginTop: '8px' }}>
-                                 <span className={`badge ${
-                                   b.paymentStatus === 'paid' || b.status === 'confirmed' ? 'badge-success' : 
-                                   b.paymentStatus === 'pending' || b.status === 'pending_payment' ? 'badge-warning' :
-                                   'badge-secondary'
-                                 }`}>
-                                   Booking: {b.bookingStatus === 'confirmed' ? 'Confirmed' : b.bookingStatus || 'Pending'}
-                                 </span>
-                                 {pay && (
-                                   <span className={`badge ${
-                                     (pay.paymentStatus || pay.status) === 'paid' ? 'badge-success' : 
-                                     (pay.paymentStatus || pay.status) === 'pending' ? 'badge-warning' :
-                                     'badge-secondary'
-                                   }`}>
-                                     Payment: {(pay.paymentStatus || pay.status) || 'pending'}
-                                   </span>
-                                 )}
-                               </div>
-                            </div>
 
-                            <div className="flex gap-2">
-                              <button className="btn btn-secondary" onClick={() => setSelectedReceiptBooking(b)}>
-                                <Icons.FileText size={16} /> Receipt
-                              </button>
-                              
-{b.bookingStatus === 'pending_payment' || b.status === 'pending_payment' ? (
-                                 <button className="btn btn-danger" onClick={() => cancelBooking(b.id, 'user')}>
-                                   Cancel Stay
-                                 </button>
-                               ) : null}
+                    <div className="flex gap-2" style={{ margin: '12px 0' }}>
+                      <div className="input-search-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: 'var(--radius-pill)', flexGrow: 1, gap: '8px' }}>
+                        <Icons.Search size={18} />
+                        <input type="text" placeholder="Search properties by title, city, or country..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', color: 'var(--text-primary)', width: '100%', fontSize: '0.95rem' }} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      {filteredProperties.map(p => {
+                        const coverImg = propertyImages.find(img => img.propertyId === p.id && img.isCover)?.url || '/beach_villa.png';
+                        return (
+                          <div key={p.id} className="glass flex flex-col" style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', cursor: 'pointer' }} onClick={() => handlePropertySelect(p.id)}>
+                            <img src={coverImg} alt={p.title} style={{ height: '200px', objectFit: 'cover' }} />
+                            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <h4 style={{ margin: 0 }}>{p.title}</h4>
+                              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{p.location.city}, {p.location.country}</p>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                                <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-primary)' }}>₱{p.pricePerNight.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-secondary)' }}>/ night</span></span>
+                                <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.85rem' }}>Book Now</button>
+                              </div>
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                )}
+
+                {/* GUEST BOOKINGS HISTORY */}
+                {currentTab === 'guest_bookings' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>My Stay Bookings</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Complete list of your past and upcoming reservation schedules.</p>
+                    </div>
+
+                    {bookings.filter(b => b.userId === currentUser.id).length === 0 ? (
+                      <div className="glass" style={{ padding: '32px', textAlign: 'center', borderRadius: 'var(--radius-md)' }}>
+                        <Icons.Calendar size={32} style={{ color: 'var(--text-tertiary)', marginBottom: '12px' }} />
+                        <p style={{ color: 'var(--text-secondary)' }}>You haven't reserved any property yet.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {bookings.filter(b => b.userId === currentUser.id).map(b => {
+                          const prop = properties.find(p => p.id === b.propertyId);
+                          const unit = propertyUnits.find(u => u.id === b.unitId);
+                          const pay = payments.find(py => py.bookingId === b.id);
+                          return (
+                            <div key={b.id} className="glass" style={{ padding: '20px', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div className="flex flex-col gap-1">
+                                <h4 style={{ margin: 0 }}>{prop?.title || 'Luxury Retreat'} - <span style={{ color: 'var(--color-primary)' }}>{unit?.unitName || 'Entire Stay'}</span></h4>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                  Dates: <strong>{b.checkIn}</strong> to <strong>{b.checkOut}</strong> • {b.guestsCount} guests • Total: <strong>₱{b.totalPrice.toLocaleString()}</strong>
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button className="btn btn-secondary" onClick={() => setSelectedReceiptBooking(b)}>
+                                  <Icons.FileText size={16} /> Receipt
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* GUEST PAYMENTS HISTORY */}
+                {currentTab === 'guest_payments' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Payment History</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Review completed transactions and payment receipts.</p>
+                    </div>
+
+                    <div className="glass" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                            <th style={{ padding: '10px' }}>Booking ID</th>
+                            <th style={{ padding: '10px' }}>Amount</th>
+                            <th style={{ padding: '10px' }}>Method</th>
+                            <th style={{ padding: '10px' }}>Status</th>
+                            <th style={{ padding: '10px' }}>Date</th>
+                            <th style={{ padding: '10px', textAlign: 'right' }}>Receipt</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {payments.filter(p => bookings.some(b => b.id === p.bookingId && b.userId === currentUser.id)).map(p => {
+                            const b = bookings.find(x => x.id === p.bookingId);
+                            return (
+                              <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                <td style={{ padding: '10px', fontFamily: 'monospace' }}>{p.bookingId?.slice(0, 8)}...</td>
+                                <td style={{ padding: '10px', fontWeight: 700, color: 'var(--color-primary)' }}>₱{Number(p.amount).toLocaleString()}</td>
+                                <td style={{ padding: '10px' }}><span className="badge badge-info">{p.paymentMethod || p.method || 'N/A'}</span></td>
+                                <td style={{ padding: '10px' }}><span className="badge badge-success">{p.paymentStatus || p.status || 'paid'}</span></td>
+                                <td style={{ padding: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{new Date(p.createdAt).toLocaleDateString()}</td>
+                                <td style={{ padding: '10px', textAlign: 'right' }}>
+                                  {b && (
+                                    <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }} onClick={() => setSelectedReceiptBooking(b)}>
+                                      Receipt
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {payments.filter(p => bookings.some(b => b.id === p.bookingId && b.userId === currentUser.id)).length === 0 && (
+                            <tr>
+                              <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-tertiary)' }}>No payment records found.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* GUEST PROFILE */}
+                {currentTab === 'guest_profile' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Guest Profile</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Your verified identity and personal details.</p>
+                    </div>
+
+                    <div className="glass" style={{ padding: '32px', borderRadius: 'var(--radius-md)', display: 'flex', gap: '32px', alignItems: 'center' }}>
+                      <img src={currentUser.avatar} alt="avatar" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
+                      <div className="flex flex-col gap-2">
+                        <h3 style={{ margin: 0, fontSize: '1.5rem' }}>{currentUser.name}</h3>
+                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Email: <strong>{currentUser.email}</strong></p>
+                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Phone: <strong>{currentUser.phone}</strong></p>
+                        <div className="flex gap-2" style={{ marginTop: '8px' }}>
+                          <span className="badge badge-success">Email Verified</span>
+                          <span className="badge badge-info">Guest Account</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* GUEST NOTIFICATIONS */}
+                {currentTab === 'guest_notifications' && (
+                  <div className="flex flex-col gap-3">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>My Notifications</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Stay updates, booking confirmations, and payment status messages.</p>
+                    </div>
+
+                    <div className="glass" style={{ padding: '20px', borderRadius: 'var(--radius-md)' }}>
+                      {notifications.filter(n => n.userId === currentUser.id).length === 0 ? (
+                        <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '24px 0' }}>No notifications yet.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {notifications.filter(n => n.userId === currentUser.id).map(n => (
+                            <div key={n.id} style={{ padding: '12px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', borderLeft: `4px solid ${n.type === 'success' ? 'var(--color-success)' : 'var(--color-info)'}` }}>
+                              <p style={{ margin: 0, fontWeight: 600 }}>{n.message}</p>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{new Date(n.createdAt).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* ADMINISTRATOR PANELS */}
@@ -1256,6 +1532,45 @@ function AppContent() {
                         <button className="btn className=primary" style={{ backgroundColor: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleNavigate('admin_reports')}>
                           <Icons.FileText size={16} /> Open Reports Section
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ADMIN REVIEWS MODERATION */}
+                {currentTab === 'admin_reviews' && (
+                  <div className="flex flex-col gap-4">
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                      <h2>Reviews & Guest Feedback Moderation</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Audit guest ratings, review host replies, and moderate property feedback.</p>
+                    </div>
+
+                    <div className="glass" style={{ padding: '24px', borderRadius: 'var(--radius-md)' }}>
+                      <h4 style={{ marginBottom: '16px' }}>All Property Reviews ({reviews.length})</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {reviews.map(r => {
+                          const prop = properties.find(p => p.id === r.propertyId);
+                          return (
+                            <div key={r.id} style={{ padding: '16px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                              <div className="flex justify-between align-center" style={{ marginBottom: '8px' }}>
+                                <div>
+                                  <strong>{prop?.title || 'Property'}</strong>
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginLeft: '12px' }}>{new Date(r.createdAt).toLocaleDateString()}</span>
+                                </div>
+                                <div className="flex align-center gap-1">
+                                  <Icons.Star size={16} fill="var(--color-warning)" stroke="var(--color-warning)" />
+                                  <strong>{r.rating}</strong>
+                                </div>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-primary)' }}>"{r.comment}"</p>
+                              {r.response && (
+                                <div style={{ marginTop: '8px', padding: '8px 12px', background: 'var(--color-primary-light)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem' }}>
+                                  <strong>Host Response:</strong> {r.response}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
