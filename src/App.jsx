@@ -65,12 +65,31 @@ function AppContent() {
     );
   }
 
-  // Derive initial tab from current URL path
+  // Derive initial tab from current URL path and user credentials
   const getTabFromPath = (path) => {
-    if (path === '/login') return 'login';
-    if (path === '/register') return 'register';
-    if (path.startsWith('/guest/dashboard')) return 'guest_dashboard';
-    if (path.startsWith('/admin/dashboard')) return 'admin_dashboard';
+    let storedAdmin = null;
+    let storedUser = null;
+    try {
+      storedAdmin = JSON.parse(localStorage.getItem('airbnb_active_admin') || 'null');
+      storedUser = JSON.parse(localStorage.getItem('airbnb_active_user') || 'null');
+    } catch (e) {}
+
+    const hasAdmin = !!(currentAdmin || storedAdmin);
+    const hasUser = !!(currentUser || storedUser);
+
+    if (path === '/login' || path === '/register') {
+      if (hasAdmin) return 'admin_dashboard';
+      if (hasUser) return 'guest_dashboard';
+      return path === '/login' ? 'login' : 'register';
+    }
+    if (path.startsWith('/guest/dashboard')) {
+      if (hasAdmin) return 'admin_dashboard';
+      return hasUser ? 'guest_dashboard' : 'login';
+    }
+    if (path.startsWith('/admin/dashboard')) {
+      if (hasAdmin) return 'admin_dashboard';
+      return hasUser ? 'guest_dashboard' : 'login';
+    }
     return 'home';
   };
 
@@ -173,7 +192,7 @@ function AppContent() {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
 
-  const handleNavigate = (tab, path = null) => {
+  const handleNavigate = (tab, path = null, overrideRole = null) => {
     let targetPath = path;
     if (!targetPath) {
       if (tab === 'home') targetPath = '/';
@@ -185,10 +204,21 @@ function AppContent() {
       else targetPath = '/';
     }
 
+    let storedAdmin = null;
+    let storedUser = null;
+    try {
+      storedAdmin = JSON.parse(localStorage.getItem('airbnb_active_admin') || 'null');
+      storedUser = JSON.parse(localStorage.getItem('airbnb_active_user') || 'null');
+    } catch (e) {}
+
+    const effectiveAdmin = currentAdmin || storedAdmin;
+    const effectiveUser = currentUser || storedUser;
+    const effectiveRole = overrideRole || (effectiveAdmin ? 'admin' : (effectiveUser ? 'guest' : activeRole));
+
     // Role-Based Access Control (RBAC) Route Protection:
     if (tab.startsWith('admin')) {
-      if (activeRole !== 'admin' || !currentAdmin) {
-        if (currentUser) {
+      if (effectiveRole !== 'admin' || !effectiveAdmin) {
+        if (effectiveUser) {
           targetPath = '/guest/dashboard';
           tab = 'guest_dashboard';
         } else {
@@ -197,12 +227,20 @@ function AppContent() {
         }
       }
     } else if (tab.startsWith('guest')) {
-      if (activeRole === 'admin' && currentAdmin) {
+      if (effectiveRole === 'admin' && effectiveAdmin) {
         targetPath = '/admin/dashboard';
         tab = 'admin_dashboard';
-      } else if (!currentUser) {
+      } else if (!effectiveUser) {
         targetPath = '/login';
         tab = 'login';
+      }
+    } else if (tab === 'login' || tab === 'register') {
+      if (effectiveAdmin) {
+        targetPath = '/admin/dashboard';
+        tab = 'admin_dashboard';
+      } else if (effectiveUser) {
+        targetPath = '/guest/dashboard';
+        tab = 'guest_dashboard';
       }
     }
 
@@ -218,19 +256,8 @@ function AppContent() {
     const handlePopState = () => {
       const path = window.location.pathname;
       setCurrentPath(path);
-      if (path === '/login') setCurrentTab('login');
-      else if (path === '/register') setCurrentTab('register');
-      else if (path.startsWith('/guest/dashboard')) {
-        if (activeRole === 'admin' && currentAdmin) setCurrentTab('admin_dashboard');
-        else if (currentUser) setCurrentTab('guest_dashboard');
-        else setCurrentTab('login');
-      } else if (path.startsWith('/admin/dashboard')) {
-        if (activeRole === 'admin' && currentAdmin) setCurrentTab('admin_dashboard');
-        else if (currentUser) setCurrentTab('guest_dashboard');
-        else setCurrentTab('login');
-      } else {
-        setCurrentTab('home');
-      }
+      const tab = getTabFromPath(path);
+      setCurrentTab(tab);
     };
 
     window.addEventListener('popstate', handlePopState);

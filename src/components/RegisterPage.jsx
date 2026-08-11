@@ -18,10 +18,9 @@ export default function RegisterPage({ onNavigate }) {
 
     try {
       await registerUser(name, email, password, phone);
-      onNavigate('guest_dashboard', '/guest/dashboard');
+      onNavigate('guest_dashboard', '/guest/dashboard', 'guest');
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
-    } finally {
       setLoading(false);
     }
   };

@@ -13,7 +13,15 @@ export function DbProvider({ children }) {
   }, []);
 
   // ── Session state ─────────────────────────────────────────────────────────
-  const [activeRole, setActiveRole] = useState('guest');
+  const [activeRole, setActiveRole] = useState(() => {
+    try {
+      if (localStorage.getItem('airbnb_active_admin')) return 'admin';
+      if (localStorage.getItem('airbnb_active_user')) return 'guest';
+    } catch (e) {
+      return 'guest';
+    }
+    return 'guest';
+  });
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('airbnb_active_user') || 'null'); } catch { return null; }
   });

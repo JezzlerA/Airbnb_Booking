@@ -17,13 +17,12 @@ export default function LoginPage({ onNavigate }) {
     try {
       const res = await loginUnified(email, password);
       if (res.role === 'admin') {
-        onNavigate('admin_dashboard', '/admin/dashboard');
+        onNavigate('admin_dashboard', '/admin/dashboard', 'admin');
       } else {
-        onNavigate('guest_dashboard', '/guest/dashboard');
+        onNavigate('guest_dashboard', '/guest/dashboard', 'guest');
       }
     } catch (err) {
       setError(err.message || 'Invalid email or password.');
-    } finally {
       setLoading(false);
     }
   };
