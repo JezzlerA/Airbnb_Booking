@@ -407,6 +407,43 @@ export async function archiveProperty(id: string) {
   return { id, status: 'archived' };
 }
 
+export async function deletePropertyPermanently(id: string) {
+  const client = await pool.connect();
+
+  try {
+    await client.query('begin');
+
+    const propertyResult = await client.query(
+      `select id from properties where id = $1 for update`,
+      [id]
+    );
+
+    if (propertyResult.rowCount !== 1) {
+      throw createHttpError(404, 'not_found', 'Property not found.');
+    }
+
+    await client.query('delete from property_images where property_id = $1', [id]);
+    await client.query('delete from reviews where property_id = $1', [id]);
+    await client.query('delete from bookings where property_id = $1', [id]);
+    await client.query('delete from property_units where property_id = $1', [id]);
+
+    const result = await client.query('delete from properties where id = $1 returning id', [id]);
+
+    await client.query('commit');
+
+    if (result.rowCount !== 1) {
+      throw createHttpError(404, 'not_found', 'Property not found.');
+    }
+
+    return { id, deleted: true };
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function getPropertyForBooking(id: string) {
   const { rows } = await pool.query(
     `select id, owner_id, price_per_night, seasonal_pricing, discounts

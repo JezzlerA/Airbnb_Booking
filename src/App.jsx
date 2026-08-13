@@ -32,6 +32,7 @@ function AppContent() {
     addProperty,
     updateProperty,
     deleteProperty,
+    deletePropertyPermanently,
     addPropertyUnit,
     updatePropertyUnit,
     deletePropertyUnit,
@@ -1642,8 +1643,11 @@ function AppContent() {
                                 <button className="btn btn-secondary" style={{ padding: '8px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }} onClick={() => { setSelectedAdminPropertyId(p.id); handleNavigate('admin_units'); }} title="Manage Units">
                                   <Icons.Box size={14} /> Units
                                 </button>
-                                <button className="btn btn-danger" style={{ padding: '8px 12px' }} onClick={() => deleteProperty(p.id)} title="Archive Property">
-                                  <Icons.Trash size={14} />
+                                <button className="btn btn-secondary" style={{ padding: '8px 12px', border: '1px solid var(--color-warning)', color: 'var(--color-warning)' }} onClick={() => deleteProperty(p.id)} title="Archive Property">
+                                  <Icons.Archive size={14} />
+                                </button>
+                                <button className="btn btn-danger" style={{ padding: '8px 12px' }} onClick={() => { if (window.confirm('Permanently delete this property? This action cannot be undone and will remove all related data.')) deletePropertyPermanently(p.id); }} title="Delete Permanently">
+                                  <Icons.Trash2 size={14} />
                                 </button>
                               </div>
                             </div>
@@ -1728,12 +1732,12 @@ function AppContent() {
                                   </td>
                                   <td style={{ padding: '10px 8px', textAlign: 'right' }}>
                                     <div className="flex gap-1 justify-end">
-                                      <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} onClick={() => handleOpenUnitForm(u.id)}>
-                                        Edit
-                                      </button>
-                                      <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '0.8rem' }} onClick={() => deletePropertyUnit(u.id)}>
-                                        Delete
-                                      </button>
+                                       <button className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }} onClick={() => handleOpenUnitForm(u.id)}>
+                                         Edit
+                                       </button>
+                                       <button className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '0.8rem' }} onClick={() => { if (window.confirm('Delete this unit? This action cannot be undone.')) deletePropertyUnit(u.id); }}>
+                                         Delete
+                                       </button>
                                     </div>
                                   </td>
                                 </tr>

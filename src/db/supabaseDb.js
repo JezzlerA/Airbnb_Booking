@@ -470,6 +470,30 @@ export async function archivePropertyDb(id) {
   if (error) throw new Error(error.message);
 }
 
+export async function deletePropertyPermanentlyDb(id) {
+  if (!SUPABASE_ENABLED) {
+    const imgs = localDb.getTable('property_images').filter(img => img.propertyId !== id);
+    const reviews = localDb.getTable('reviews').filter(r => r.propertyId !== id);
+    const bookings = localDb.getTable('bookings').filter(b => b.propertyId !== id);
+    const units = localDb.getTable('property_units').filter(u => u.propertyId !== id);
+    const props = localDb.getTable('properties').filter(p => p.id !== id);
+
+    localDb.saveTable('property_images', imgs);
+    localDb.saveTable('reviews', reviews);
+    localDb.saveTable('bookings', bookings);
+    localDb.saveTable('property_units', units);
+    localDb.saveTable('properties', props);
+    return;
+  }
+
+  await supabase.from('property_images').delete().eq('property_id', id);
+  await supabase.from('reviews').delete().eq('property_id', id);
+  await supabase.from('bookings').delete().eq('property_id', id);
+  await supabase.from('property_units').delete().eq('property_id', id);
+  const { error } = await supabase.from('properties').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BOOKING functions
 // ─────────────────────────────────────────────────────────────────────────────

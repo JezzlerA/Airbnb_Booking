@@ -67,6 +67,13 @@ export async function archiveProperty(id, token) {
   });
 }
 
+export async function deletePropertyPermanently(id, token) {
+  return request(`/properties/${id}/permanent`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
 export async function getPropertyUnits(token) {
   return request('/property-units', {
     headers: { Authorization: `Bearer ${token}` }

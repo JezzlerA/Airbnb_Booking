@@ -65,3 +65,13 @@ propertyRouter.delete(
     res.json({ data });
   })
 );
+
+propertyRouter.delete(
+  '/:id/permanent',
+  requireAuth,
+  requireRoles('admin'),
+  asyncHandler(async (req, res) => {
+    const data = await propertyService.deletePropertyPermanently(req.params.id as string);
+    res.json({ data });
+  })
+);

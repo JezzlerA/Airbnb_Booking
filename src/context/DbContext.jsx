@@ -323,6 +323,17 @@ export function DbProvider({ children }) {
     await loadAllData();
   };
 
+  const deletePropertyPermanently = async (id) => {
+    if (!currentAdmin) throw new Error('Unauthorized.');
+    await sdb.deletePropertyPermanentlyDb(id);
+    try {
+      await sdb.insertActivityLogDb(currentAdmin.id, 'Deleted Property Permanently', `Permanently deleted property ID: ${id}`);
+    } catch (logErr) {
+      console.error('[DbContext] Activity log failed:', logErr.message);
+    }
+    await loadAllData();
+  };
+
   // ── Unit management ───────────────────────────────────────────────────────
 
   const addPropertyUnit = async (unitData) => {
@@ -611,7 +622,7 @@ export function DbProvider({ children }) {
       // Auth
       registerUser, registerAdmin, loginUser, loginAdmin, loginUnified, logout, changeAdminPassword,
       // Properties
-      addProperty, updateProperty, deleteProperty,
+      addProperty, updateProperty, deleteProperty, deletePropertyPermanently,
       // Units
       addPropertyUnit, updatePropertyUnit, deletePropertyUnit,
       // Bookings
