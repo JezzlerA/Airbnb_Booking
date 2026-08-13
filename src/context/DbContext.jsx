@@ -103,18 +103,18 @@ export function DbProvider({ children }) {
         settingsResult,
       ] = results;
 
-      setProperties(propsResult.status === 'fulfilled'     ? (propsResult.value     || []) : []);
-      setPropertyUnits(unitsResult.status === 'fulfilled'   ? (unitsResult.value     || []) : []);
-      setPropertyImages(imgsResult.status === 'fulfilled'   ? (imgsResult.value     || []) : []);
-      setBookings(bookingsResult.status === 'fulfilled'     ? (bookingsResult.value || []) : []);
-      setPayments(paymentsResult.status === 'fulfilled'     ? (paymentsResult.value || []) : []);
-      setReviews(reviewsResult.status === 'fulfilled'       ? (reviewsResult.value  || []) : []);
-      setAmenities(amenitiesResult.status === 'fulfilled'   ? (amenitiesResult.value || []) : []);
-      setNotifications(notifsResult.status === 'fulfilled'  ? (notifsResult.value   || []) : []);
-      setActivityLogs(logsResult.status === 'fulfilled'     ? (logsResult.value     || []) : []);
-      setSettings(settingsResult.status === 'fulfilled'     ? (settingsResult.value || {}) : {});
+      setProperties(prev => propsResult.status === 'fulfilled' ? (propsResult.value || []) : prev);
+      setPropertyUnits(prev => unitsResult.status === 'fulfilled' ? (unitsResult.value || []) : prev);
+      setPropertyImages(prev => imgsResult.status === 'fulfilled' ? (imgsResult.value || []) : prev);
+      setBookings(prev => bookingsResult.status === 'fulfilled' ? (bookingsResult.value || []) : prev);
+      setPayments(prev => paymentsResult.status === 'fulfilled' ? (paymentsResult.value || []) : prev);
+      setReviews(prev => reviewsResult.status === 'fulfilled' ? (reviewsResult.value || []) : prev);
+      setAmenities(prev => amenitiesResult.status === 'fulfilled' ? (amenitiesResult.value || []) : prev);
+      setNotifications(prev => notifsResult.status === 'fulfilled' ? (notifsResult.value || []) : prev);
+      setActivityLogs(prev => logsResult.status === 'fulfilled' ? (logsResult.value || []) : prev);
+      setSettings(prev => settingsResult.status === 'fulfilled' ? (settingsResult.value || {}) : prev);
 
-      console.log('[DbContext] loadAllData complete. Props count:', propsResult.status === 'fulfilled' ? propsResult.value?.length : 'ERROR', 'Active role:', activeRole);
+      console.log('[DbContext] loadAllData complete. Props count:', propsResult.status === 'fulfilled' ? propsResult.value?.length : 'PRESERVED', 'Active role:', activeRole);
 
       results.forEach((result, index) => {
         if (result.status === 'rejected') {

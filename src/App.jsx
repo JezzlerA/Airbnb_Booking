@@ -24,6 +24,7 @@ function AppContent() {
     settings,
     loading,
     supabaseEnabled,
+    loadAllData,
     registerUser,
     loginUser,
     loginAdmin,
@@ -106,7 +107,7 @@ function AppContent() {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [priceFilter, setPriceFilter] = useState(1000);
+  const [priceFilter, setPriceFilter] = useState(10000);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
 
   // Modals state
@@ -251,6 +252,10 @@ function AppContent() {
     setCurrentPath(targetPath);
     setCurrentTab(tab);
     window.scrollTo(0, 0);
+
+    if (tab === 'guest_properties') {
+      loadAllData().catch(() => {});
+    }
   };
 
   useEffect(() => {
@@ -325,7 +330,7 @@ function AppContent() {
 
   // 1. FILTER PROPERTIES LIST
   const filteredProperties = properties.filter(p => {
-    if (p.status === 'archived') return false;
+    if (p.status !== 'available') return false;
 
     const matchesSearch =
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
