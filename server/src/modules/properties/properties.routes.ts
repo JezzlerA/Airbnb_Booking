@@ -9,9 +9,10 @@ export const propertyRouter = Router();
 propertyRouter.get(
   '/',
   asyncHandler(async (req, res) => {
+    const isPublic = !req.user;
     const data = await propertyService.listProperties({
       category: typeof req.query.category === 'string' ? req.query.category : undefined,
-      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      status: isPublic ? 'available' : (typeof req.query.status === 'string' ? req.query.status : undefined),
       city: typeof req.query.city === 'string' ? req.query.city : undefined,
       minPrice: typeof req.query.minPrice === 'string' ? Number(req.query.minPrice) : undefined,
       maxPrice: typeof req.query.maxPrice === 'string' ? Number(req.query.maxPrice) : undefined,
@@ -27,7 +28,8 @@ propertyRouter.get(
 propertyRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const data = await propertyService.getPropertyById(req.params.id as string);
+    const isPublic = !req.user;
+    const data = await propertyService.getPropertyById(req.params.id as string, isPublic ? 'available' : undefined);
     res.json({ data });
   })
 );

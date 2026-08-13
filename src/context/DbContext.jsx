@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { initDB } from '../db/db';
-import { SUPABASE_ENABLED } from '../db/supabaseClient';
+import { SUPABASE_ENABLED, supabase } from '../db/supabaseClient';
 import * as sdb from '../db/supabaseDb';
+import * as api from '../api';
 
 const DbContext = createContext();
 
@@ -42,67 +43,152 @@ export function DbProvider({ children }) {
   const [settings,       setSettings]       = useState({});
   const [loading,        setLoading]        = useState(true);
 
-  // ── Load all data from Supabase / localStorage ───────────────────────────
+  const useApi = import.meta.env.VITE_API_URL && !SUPABASE_ENABLED;
+
+  // ── Load all data ─────────────────────────────────────────────────────────
   const loadAllData = useCallback(async () => {
-    const results = await Promise.allSettled([
-      sdb.fetchProperties(),
-      sdb.fetchPropertyUnits(),
-      sdb.fetchPropertyImages(),
-      sdb.fetchBookings(),
-      sdb.fetchPayments(),
-      sdb.fetchReviews(),
-      sdb.fetchAmenities(),
-      sdb.fetchNotifications(),
-      sdb.fetchActivityLogs(),
-      sdb.fetchSettings(),
-    ]);
-
-    const [
-      propsResult,
-      unitsResult,
-      imgsResult,
-      bookingsResult,
-      paymentsResult,
-      reviewsResult,
-      amenitiesResult,
-      notifsResult,
-      logsResult,
-      settingsResult,
-    ] = results;
-
-    setProperties(propsResult.status === 'fulfilled'     ? (propsResult.value     || []) : []);
-    setPropertyUnits(unitsResult.status === 'fulfilled'   ? (unitsResult.value     || []) : []);
-    setPropertyImages(imgsResult.status === 'fulfilled'   ? (imgsResult.value     || []) : []);
-    setBookings(bookingsResult.status === 'fulfilled'     ? (bookingsResult.value || []) : []);
-    setPayments(paymentsResult.status === 'fulfilled'     ? (paymentsResult.value || []) : []);
-    setReviews(reviewsResult.status === 'fulfilled'       ? (reviewsResult.value  || []) : []);
-    setAmenities(amenitiesResult.status === 'fulfilled'   ? (amenitiesResult.value || []) : []);
-    setNotifications(notifsResult.status === 'fulfilled'  ? (notifsResult.value   || []) : []);
-    setActivityLogs(logsResult.status === 'fulfilled'     ? (logsResult.value     || []) : []);
-    setSettings(settingsResult.status === 'fulfilled'     ? (settingsResult.value     || {}) : {});
-
-    console.log('[DbContext] loadAllData complete. Props count:', propsResult.status === 'fulfilled' ? propsResult.value?.length : 'ERROR', 'Active role:', activeRole);
-
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const names = ['properties', 'units', 'images', 'bookings', 'payments', 'reviews', 'amenities', 'notifications', 'logs', 'settings'];
-        console.error(`[DbContext] Failed to load ${names[index]}:`, result.reason?.message || result.reason);
+    try {
+      let results;
+      if (useApi && currentAdmin) {
+        results = await Promise.allSettled([
+          api.getProperties(),
+          api.getPropertyUnits(),
+          api.getPropertyImages(),
+          api.getBookings(currentAdmin.id || currentUser?.id),
+          api.getPayments(currentAdmin.id || currentUser?.id),
+          api.getReviews(),
+          api.getAmenities(),
+          api.getNotifications(currentAdmin.id || currentUser?.id),
+          api.getActivityLogs(),
+          api.getSettings()
+        ]);
+      } else if (useApi && currentUser) {
+        results = await Promise.allSettled([
+          api.getProperties(),
+          api.getPropertyUnits(),
+          api.getPropertyImages(),
+          api.getBookings(currentUser.id),
+          api.getPayments(currentUser.id),
+          api.getReviews(),
+          api.getAmenities(),
+          api.getNotifications(currentUser.id),
+          Promise.resolve([]),
+          api.getSettings()
+        ]);
+      } else {
+        results = await Promise.allSettled([
+          sdb.fetchProperties(),
+          sdb.fetchPropertyUnits(),
+          sdb.fetchPropertyImages(),
+          sdb.fetchBookings(),
+          sdb.fetchPayments(),
+          sdb.fetchReviews(),
+          sdb.fetchAmenities(),
+          sdb.fetchNotifications(),
+          sdb.fetchActivityLogs(),
+          sdb.fetchSettings(),
+        ]);
       }
-    });
 
-    setLoading(false);
-  }, []);
+      const [
+        propsResult,
+        unitsResult,
+        imgsResult,
+        bookingsResult,
+        paymentsResult,
+        reviewsResult,
+        amenitiesResult,
+        notifsResult,
+        logsResult,
+        settingsResult,
+      ] = results;
+
+      setProperties(propsResult.status === 'fulfilled'     ? (propsResult.value     || []) : []);
+      setPropertyUnits(unitsResult.status === 'fulfilled'   ? (unitsResult.value     || []) : []);
+      setPropertyImages(imgsResult.status === 'fulfilled'   ? (imgsResult.value     || []) : []);
+      setBookings(bookingsResult.status === 'fulfilled'     ? (bookingsResult.value || []) : []);
+      setPayments(paymentsResult.status === 'fulfilled'     ? (paymentsResult.value || []) : []);
+      setReviews(reviewsResult.status === 'fulfilled'       ? (reviewsResult.value  || []) : []);
+      setAmenities(amenitiesResult.status === 'fulfilled'   ? (amenitiesResult.value || []) : []);
+      setNotifications(notifsResult.status === 'fulfilled'  ? (notifsResult.value   || []) : []);
+      setActivityLogs(logsResult.status === 'fulfilled'     ? (logsResult.value     || []) : []);
+      setSettings(settingsResult.status === 'fulfilled'     ? (settingsResult.value || {}) : {});
+
+      console.log('[DbContext] loadAllData complete. Props count:', propsResult.status === 'fulfilled' ? propsResult.value?.length : 'ERROR', 'Active role:', activeRole);
+
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const names = ['properties', 'units', 'images', 'bookings', 'payments', 'reviews', 'amenities', 'notifications', 'logs', 'settings'];
+          console.error(`[DbContext] Failed to load ${names[index]}:`, result.reason?.message || result.reason);
+        }
+      });
+    } catch (error) {
+      console.error('[DbContext] loadAllData error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [SUPABASE_ENABLED, currentAdmin, currentUser, activeRole, useApi]);
 
   // Initial load
   useEffect(() => { loadAllData(); }, [loadAllData]);
 
   // Re-sync when localStorage DB changes (offline mode)
   useEffect(() => {
-    if (SUPABASE_ENABLED) return; // Supabase handles sync differently
+    if (SUPABASE_ENABLED) return;
     const handler = () => loadAllData();
     window.addEventListener('airbnb_db_update', handler);
     return () => window.removeEventListener('airbnb_db_update', handler);
   }, [loadAllData]);
+
+  // ── Real-time sync via Supabase Realtime ──────────────────────────────────
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !supabase) return;
+
+    const channels = [];
+
+    const tables = [
+      'properties',
+      'property_units',
+      'property_images',
+      'bookings',
+      'payments',
+      'reviews',
+      'amenities',
+      'notifications',
+      'activity_logs',
+      'settings'
+    ];
+
+    tables.forEach((name) => {
+      const channel = supabase
+        .channel(`db-changes-${name}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: name },
+          (payload) => {
+            console.log(`[Realtime] ${name} changed:`, payload.eventType, payload.new?.id || payload.old?.id);
+            loadAllData();
+          }
+        )
+        .subscribe();
+      channels.push(channel);
+    });
+
+    return () => {
+      channels.forEach(channel => {
+        supabase.removeChannel(channel);
+      });
+    };
+  }, [SUPABASE_ENABLED, loadAllData]);
+
+  // ── Polling fallback for non-Supabase mode ─────────────────────────────────
+  useEffect(() => {
+    if (SUPABASE_ENABLED) return;
+    const interval = setInterval(() => {
+      loadAllData();
+    }, 30000); // Poll every 30 seconds as fallback
+    return () => clearInterval(interval);
+  }, [SUPABASE_ENABLED, loadAllData]);
 
   // ── Auth functions ────────────────────────────────────────────────────────
 

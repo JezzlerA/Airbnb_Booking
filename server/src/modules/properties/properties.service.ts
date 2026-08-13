@@ -224,9 +224,8 @@ export async function listProperties(filters: {
   };
 }
 
-export async function getPropertyById(id: string) {
-  const { rows } = await pool.query<PropertyRow>(
-    `select
+export async function getPropertyById(id: string, status?: string) {
+  let query = `select
        p.*,
        coalesce(
          jsonb_agg(
@@ -242,10 +241,18 @@ export async function getPropertyById(id: string) {
        ) as images
      from properties p
      left join property_images pi on pi.property_id = p.id
-     where p.id = $1
-     group by p.id`,
-    [id]
-  );
+     where p.id = $1`;
+  
+  const values: unknown[] = [id];
+  
+  if (status) {
+    query += ` and p.status = $${values.length + 1}`;
+    values.push(status);
+  }
+  
+  query += ` group by p.id`;
+
+  const { rows } = await pool.query<PropertyRow>(query, values);
 
   const row = rows[0];
 
